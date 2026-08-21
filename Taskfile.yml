@@ -13,11 +13,17 @@ tasks:
     # http://admin.lab:8080
 
   b: |
-    go build -o bin/client ./cmd/gater
+    go build -o bin/gater ./cmd/client
     go build -o bin/server ./cmd/server
+  b2: |
+    go generate ./...
+    go build -v ./...
 
   gen: |
     go generate ./...
+
+  asset.clean: |
+    rm -fr web/dist
 
   asset.setup: |
     # curl https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js
