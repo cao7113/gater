@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/cao7113/gater/entry/api"
-	"github.com/cao7113/gater/entry/remote"
+	"github.com/cao7113/gater/entry/proxy"
 	"github.com/cao7113/gater/internal/manager"
 	"github.com/cao7113/gater/web"
 )
@@ -25,7 +25,7 @@ func New(cfg Config, mgr *manager.Manager) *http.Server {
 
 	return &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: route(cfg.AdminHost, adminHandler, remote.NewHandler(mgr)),
+		Handler: route(cfg.AdminHost, adminHandler, proxy.NewHandler(mgr)),
 	}
 }
 

@@ -1,4 +1,4 @@
-package remote
+package proxy
 
 import "testing"
 
