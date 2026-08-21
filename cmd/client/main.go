@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cao7113/gater/entry/api"
+	"github.com/cao7113/gater/internal/version"
 )
 
 const defaultServerURL = "http://localhost:8080"
@@ -23,7 +24,12 @@ type client struct {
 
 func main() {
 	flag.Usage = usage
+	showVersion := flag.Bool("version", false, "显示版本")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
 
 	args := flag.Args()
 	if len(args) == 0 {

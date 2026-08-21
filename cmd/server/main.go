@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/cao7113/gater/entry"
 	"github.com/cao7113/gater/internal/manager"
 	"github.com/cao7113/gater/internal/store"
+	"github.com/cao7113/gater/internal/version"
 )
 
 const (
@@ -29,10 +31,16 @@ type options struct {
 }
 
 func main() {
+	showVersion := flag.Bool("version", false, "显示版本")
+	opts := parseOptions()
+	if *showVersion {
+		fmt.Println(version.String())
+		return
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	opts := parseOptions()
 	st, err := store.NewStore(opts.storePath)
 	if err != nil {
 		log.Fatalf("初始化存储层失败: %v", err)

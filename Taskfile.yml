@@ -18,6 +18,9 @@ tasks:
   b2: |
     go generate ./...
     go build -v ./...
+    
+  release.snapshot: |
+    goreleaser release --snapshot --clean
 
   gen: |
     go generate ./...
