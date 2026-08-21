@@ -1,0 +1,4 @@
+name: demo
+cmd: "sh"
+args: ["-c", "python3 -m http.server $PORT"]
+idle_timeout: "5m"

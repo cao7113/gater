@@ -1,0 +1,35 @@
+# https://taskfile.dev/docs/guide
+# https://taskfile.dev/reference/templating/
+version: '3'
+tasks:
+  default: |
+    go test ./...
+
+  run: |
+    go run cmd/gater/main.go 
+    # http://admin.lab:8080
+
+  build: |
+    go build -o bin/gater ./cmd/gater
+
+    
+  gen: |
+    go generate ./...
+
+  asset.setup: |
+    # curl https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js
+    
+    # 安装 Tailwind CSS CLI 工具与 DaisyUI
+    bun add -d tailwindcss @tailwindcss/cli daisyui alpinejs
+
+    # # 触发所有 go:generate 指令（打包 CSS 并嵌入二进制）
+    # go generate ./...
+
+    # # 编译最终单文件可执行文件
+    # go build -o gater main.go
+
+  setup: |
+    # go mod init gater
+    # 初始化并拉取 yaml 依赖
+    go mod tidy
+  

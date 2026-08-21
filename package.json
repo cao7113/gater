@@ -1,0 +1,16 @@
+{
+  "name": "gater",
+  "private": true,
+  "scripts": {
+    "build.css": "bunx @tailwindcss/cli -i ./web/src/app.css -o ./web/dist/app.css --minify",
+    "build.js": "bun build ./web/src/app.js --outfile ./web/dist/app.js --minify",
+    "cp.pages": "bunx shx cp ./web/src/index.html ./web/dist/index.html"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "alpinejs": "^3.16.1",
+    "daisyui": "^5.7.17",
+    "tailwindcss": "^4.3.3"
+  }
+}
