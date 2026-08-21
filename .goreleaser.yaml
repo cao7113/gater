@@ -5,8 +5,8 @@ before:
     - go generate ./...
 
 builds:
-  - id: client
-    main: ./cmd/client
+  - id: server
+    main: ./cmd/server
     binary: gater
     goos:
       - linux
@@ -18,9 +18,10 @@ builds:
       - "-s -w -X github.com/cao7113/gater/internal/version.Version={{ .Version }} -X github.com/cao7113/gater/internal/version.Commit={{ .Commit }} -X github.com/cao7113/gater/internal/version.Date={{ .Date }}"
     env:
       - CGO_ENABLED=0
-  - id: server
-    main: ./cmd/server
-    binary: server
+      
+  - id: client
+    main: ./cmd/client
+    binary: gater-client
     goos:
       - linux
       - darwin
@@ -35,10 +36,17 @@ builds:
 archives:
   - id: gater
     builds:
-      - client
       - server
     formats: [tar.gz]
     name_template: "gater_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE*
+      - README*
+  - id: gater-client
+    builds:
+      - client
+    formats: [tar.gz]
+    name_template: "gater-client_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE*
       - README*

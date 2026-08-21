@@ -5,22 +5,25 @@ tasks:
   default: |
     go test ./...
 
-  cli: |
-    go run cmd/client/main.go
-
   run: |
     go run cmd/server/main.go 
     # http://admin.lab:8080
 
+  cli: |
+    go run cmd/client/main.go
+
   b: |
-    go build -o bin/gater ./cmd/client
-    go build -o bin/server ./cmd/server
-  b2: |
-    go generate ./...
-    go build -v ./...
+    go build -o bin/gater ./cmd/server
+    go build -o bin/gater-client ./cmd/client
     
-  release.snapshot: |
+  rel.snapshot: |
     goreleaser release --snapshot --clean
+
+  launchd.install: |
+    ./scripts/install-macos-launchd.sh
+
+  launchd.uninstall: |
+    ./scripts/uninstall-macos-launchd.sh
 
   gen: |
     go generate ./...
@@ -29,19 +32,9 @@ tasks:
     rm -fr web/dist
 
   asset.setup: |
-    # curl https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js
-    
-    # 安装 Tailwind CSS CLI 工具与 DaisyUI
     bun add -d tailwindcss @tailwindcss/cli daisyui alpinejs
-
-    # # 触发所有 go:generate 指令（打包 CSS 并嵌入二进制）
-    # go generate ./...
-
-    # # 编译最终单文件可执行文件
-    # go build -o gater main.go
 
   setup: |
     # go mod init gater
-    # 初始化并拉取 yaml 依赖
     go mod tidy
   
