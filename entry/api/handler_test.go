@@ -82,3 +82,22 @@ func TestDeleteApp(t *testing.T) {
 		t.Fatalf("want 200, got %d", res.Code)
 	}
 }
+
+func TestGetApp(t *testing.T) {
+	h := &handler{mgr: newFakeMgr(testApp("myapp"))}
+	req := httptest.NewRequest(http.MethodGet, "/api/apps/myapp", nil)
+	req.SetPathValue("name", "myapp")
+	res := httptest.NewRecorder()
+
+	h.getApp(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", res.Code)
+	}
+	var app AppInfo
+	if err := json.NewDecoder(res.Body).Decode(&app); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if app.Name != "myapp" {
+		t.Fatalf("want myapp, got %s", app.Name)
+	}
+}

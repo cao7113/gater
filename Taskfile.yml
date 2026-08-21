@@ -5,14 +5,17 @@ tasks:
   default: |
     go test ./...
 
+  cli: |
+    go run cmd/client/main.go
+
   run: |
-    go run cmd/gater/main.go 
+    go run cmd/server/main.go 
     # http://admin.lab:8080
 
-  build: |
-    go build -o bin/gater ./cmd/gater
+  b: |
+    go build -o bin/client ./cmd/gater
+    go build -o bin/server ./cmd/server
 
-    
   gen: |
     go generate ./...
 

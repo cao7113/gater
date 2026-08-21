@@ -8,6 +8,7 @@ func NewHandler(mgr appManager) http.Handler {
 	mux.HandleFunc("POST /api/fs/pick-folder", h.pickFolder)
 	mux.HandleFunc("GET /api/apps", h.listApps)
 	mux.HandleFunc("POST /api/apps", h.createApp)
+	mux.HandleFunc("GET /api/apps/{name}", h.getApp)
 	mux.HandleFunc("DELETE /api/apps/{name}", h.deleteApp)
 	mux.HandleFunc("POST /api/apps/{name}/stop", h.stopApp)
 	mux.HandleFunc("POST /api/apps/{name}/start", h.startApp)

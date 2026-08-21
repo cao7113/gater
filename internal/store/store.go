@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	// "fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,22 +22,33 @@ type Store struct {
 	Apps     map[string]AppSpec `json:"apps"`
 }
 
-func NewStore() (*Store, error) {
-	home, err := os.UserHomeDir()
+func NewStore(paths ...string) (*Store, error) {
+	filePath, err := storePath(paths...)
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(home, ".config", "gater")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 		return nil, err
 	}
 
 	s := &Store{
-		filePath: filepath.Join(dir, "store.json"),
+		filePath: filePath,
 		Apps:     make(map[string]AppSpec),
 	}
 	_ = s.load()
 	return s, nil
+}
+
+func storePath(paths ...string) (string, error) {
+	if len(paths) > 0 && paths[0] != "" {
+		return paths[0], nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "gater", "store.json"), nil
 }
 
 func (s *Store) load() error {

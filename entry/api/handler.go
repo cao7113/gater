@@ -56,6 +56,16 @@ func (h *handler) createApp(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (h *handler) getApp(w http.ResponseWriter, r *http.Request) {
+	name := pathName(r)
+	application, exists := h.mgr.GetApp(name)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("应用 [%s] 不存在", name))
+		return
+	}
+	writeJSON(w, http.StatusOK, appToInfo(application))
+}
+
 func (h *handler) deleteApp(w http.ResponseWriter, r *http.Request) {
 	name := pathName(r)
 	if err := h.mgr.RemoveApp(name); err != nil {
