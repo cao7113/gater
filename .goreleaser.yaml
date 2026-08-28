@@ -9,7 +9,7 @@ builds:
     main: ./cmd/server
     binary: gater
     goos:
-      - linux
+      # - linux
       - darwin
     goarch:
       - amd64
@@ -18,12 +18,12 @@ builds:
       - "-s -w -X github.com/cao7113/gater/internal/version.Version={{ .Version }} -X github.com/cao7113/gater/internal/version.Commit={{ .Commit }} -X github.com/cao7113/gater/internal/version.Date={{ .Date }}"
     env:
       - CGO_ENABLED=0
-      
+
   - id: client
     main: ./cmd/client
     binary: gater-client
     goos:
-      - linux
+      # - linux
       - darwin
     goarch:
       - amd64

@@ -2,17 +2,17 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/cao7113/gater/internal/app"
 	"github.com/cao7113/gater/internal/config"
 	"github.com/cao7113/gater/internal/store"
 )
+
+var ErrAppExists = errors.New("应用已存在")
 
 type Manager struct {
 	mu       sync.RWMutex
@@ -31,95 +31,71 @@ func New(ctx context.Context, st *store.Store) *Manager {
 	}
 
 	// 从持久化存储恢复应用
-	for _, spec := range st.List() {
-		m.registerInstance(spec)
+	for _, ac := range st.List() {
+		m.registerInstance(ac)
 	}
 
 	return m
 }
 
-func (m *Manager) registerInstance(spec store.AppSpec) *app.App {
-	port := m.nextPort
-	m.nextPort++
-
-	instance := app.NewApp(spec, port)
-	m.apps[spec.Name] = instance
-
-	go instance.MonitorIdle(m.ctx)
-	return instance
+func (m *Manager) AddOrUpdateApp(appYAMLPath string) error {
+	loadedConfig, err := config.LoadFrom(appYAMLPath)
+	if err != nil {
+		return err
+	}
+	return m.RegisterApp(*loadedConfig)
 }
 
-// ExpandHomePath 展开包含 ~ 的用户主目录路径
-func ExpandHomePath(p string) (string, error) {
-	p = strings.TrimSpace(p)
-	if p == "~" {
-		return os.UserHomeDir()
-	}
-	if strings.HasPrefix(p, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, p[2:]), nil
-	}
-	return p, nil
-}
-
-func (m *Manager) AddOrUpdateApp(spec store.AppSpec) error {
+func (m *Manager) RegisterApp(ac config.AppConfig) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	expandedPath, err := ExpandHomePath(spec.Path)
-	if err != nil {
-		return fmt.Errorf("无法解析用户目录路径: %w", err)
+	if err := config.Validate(ac); err != nil {
+		return fmt.Errorf("应用配置无效: %w", err)
 	}
 
-	absPath, err := filepath.Abs(expandedPath)
-	if err != nil {
-		return fmt.Errorf("无效路径: %w", err)
-	}
-	if fi, err := os.Stat(absPath); err != nil || !fi.IsDir() {
-		return fmt.Errorf("工作目录不存在: %s", absPath)
-	}
-	spec.Path = absPath
-
-	// 如果应用目录包含 app.yaml，尝试读取默认配置做补充
-	if cfg, _, err := config.LoadAppConfig(absPath); err == nil {
-		if spec.Cmd == "" {
-			spec.Cmd = cfg.Cmd
-		}
-		if len(spec.Args) == 0 {
-			spec.Args = cfg.Args
-		}
+	if _, ok := m.apps[ac.Name]; ok {
+		return fmt.Errorf("%w: [%s]，请使用修改接口", ErrAppExists, ac.Name)
 	}
 
-	if spec.Cmd == "" {
-		return fmt.Errorf("缺少启动命令 (Cmd)")
-	}
-
-	if existing, ok := m.apps[spec.Name]; ok {
-		existing.Stop()
-	}
-
-	if err := m.store.Save(spec); err != nil {
+	if err := m.store.Save(ac); err != nil {
 		return err
 	}
 
-	m.registerInstance(spec)
-	log.Printf("[Gater] 成功注册应用: %s.lab -> %s", spec.Name, spec.Path)
+	m.registerInstance(ac)
+	log.Printf("[Gater] 成功注册应用: %s -> %s", ac.Name, ac.Cwd)
 	return nil
 }
 
-func (m *Manager) RemoveApp(name string) error {
+func (m *Manager) UpdateApp(name string, cfg config.AppConfig) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if instance, ok := m.apps[name]; ok {
-		instance.Stop()
-		delete(m.apps, name)
+	if _, ok := m.apps[name]; !ok {
+		return fmt.Errorf("应用 [%s] 不存在", name)
 	}
+	cfg.Name = name
+	if err := config.Validate(cfg); err != nil {
+		return fmt.Errorf("应用配置无效: %w", err)
+	}
+	m.apps[name].Stop()
+	if err := m.store.Save(cfg); err != nil {
+		return err
+	}
+	m.registerInstance(cfg)
+	log.Printf("[Gater] 成功更新应用配置: %s", name)
+	return nil
+}
 
-	return m.store.Delete(name)
+func (m *Manager) registerInstance(ac config.AppConfig) *app.App {
+	port := m.nextPort
+	m.nextPort++
+
+	instance := app.NewApp(ac, port)
+	m.apps[ac.Name] = instance
+
+	go instance.MonitorIdle(m.ctx)
+	return instance
 }
 
 func (m *Manager) GetApp(name string) (*app.App, bool) {
@@ -137,4 +113,20 @@ func (m *Manager) GetAllApps() map[string]*app.App {
 		res[k] = v
 	}
 	return res
+}
+
+func (m *Manager) RemoveApp(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if instance, ok := m.apps[name]; ok {
+		instance.Stop()
+		delete(m.apps, name)
+	}
+
+	return m.store.Delete(name)
+}
+
+func (m *Manager) StoreConfig() ([]byte, error) {
+	return m.store.Content()
 }

@@ -1,4 +1,10 @@
 name: demo
+# cwd: "auto-fill"
 cmd: "sh"
-args: ["-c", "python3 -m http.server $PORT"]
-idle_timeout: "5m"
+args:
+- c
+- python3 -m http.server $PORT
+env:
+  LOG_LEVEL: debug
+  FOO: bar
+idle_timeout: "10m"

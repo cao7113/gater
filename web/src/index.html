@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="dark">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +8,7 @@
   <link href="/app.css" rel="stylesheet" type="text/css" />
   <script src="/app.js" defer></script>
 </head>
+
 <body class="bg-base-300 min-h-screen text-base-content antialiased flex flex-col" x-data="dashboard">
   <!-- 顶部导航 -->
   <div class="navbar bg-base-100 shadow-md px-6 border-b border-base-200 sticky top-0 z-30">
@@ -19,10 +21,16 @@
     </div>
     <div class="flex-none gap-2">
       <button type="button" @click="fetchApps()" class="btn btn-ghost btn-sm btn-circle" title="刷新状态">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+          </path>
+        </svg>
       </button>
       <button type="button" @click="openAddModal()" class="btn btn-primary btn-sm shadow-sm gap-1">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
         <span>注册新应用</span>
       </button>
     </div>
@@ -30,13 +38,32 @@
 
   <!-- 主体内容 -->
   <main class="max-w-6xl mx-auto p-6 flex-1 w-full">
-    <div class="flex justify-between items-end mb-6">
+    <div class="flex flex-col sm:flex-row justify-between sm:items-end gap-4 mb-6">
       <div>
         <h1 class="text-2xl font-black tracking-tight">本地托管控制台</h1>
         <p class="text-xs text-base-content/60 mt-1">持久化注册、自动防漏孤儿进程清理与 Scale-to-Zero 调度</p>
       </div>
-      <div class="text-xs font-mono text-base-content/50 hidden sm:block">
-        已注册 <span class="font-bold text-primary" x-text="apps.length"></span> 个应用
+
+      <div class="flex items-center gap-3">
+        <!-- 域名后缀选择器 -->
+        <template x-if="appSuffixes && appSuffixes.length > 0">
+          <div class="flex items-center gap-1.5 bg-base-100 px-3 py-1.5 rounded-lg border border-base-200 shadow-sm">
+            <span class="text-xs text-base-content/60 font-semibold hidden md:inline">域名后缀:</span>
+            <div class="join">
+              <template x-for="item in appSuffixes" :key="item.suffix">
+                <button type="button" class="btn btn-xs join-item font-mono transition-all"
+                  :class="selectedSuffix && selectedSuffix.suffix === item.suffix ? 'btn-primary shadow-sm font-bold' : 'btn-ghost text-base-content/70 hover:text-base-content'"
+                  @click="selectedSuffix = item" :title="'访问协议: ' + (item.scheme || 'http') + '://'"
+                  x-text="item.suffix">
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <div class="text-xs font-mono text-base-content/50 hidden sm:block">
+          已注册 <span class="font-bold text-primary" x-text="apps.length"></span> 个应用
+        </div>
       </div>
     </div>
 
@@ -60,25 +87,31 @@
             <div class="flex justify-between items-start">
               <div>
                 <h2 class="card-title text-base font-bold">
-                  <a :href="'http://' + app.name + '.lab:8080'" target="_blank" 
-                     class="link link-hover link-primary flex items-center gap-1.5"
-                     :title="'访问 ' + app.name + '.lab:8080'">
-                    <span x-text="app.name + '.lab'"></span>
-                    <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                  <a :href="getAppURL(app.name)" target="_blank"
+                    class="link link-hover link-primary flex items-center gap-1.5" :title="'访问 ' + getAppURL(app.name)">
+                    <span x-text="app.name + currentSuffixStr()"></span>
+                    <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                    </svg>
                   </a>
                 </h2>
-                <p class="text-xs text-base-content/50 font-mono mt-1 truncate max-w-xs" :title="app.path" x-text="app.path"></p>
+                <p class="text-xs text-base-content/50 font-mono mt-1 truncate max-w-xs" :title="app.path"
+                  x-text="app.path"></p>
               </div>
 
               <!-- 状态徽章 (使用 x-show 确保 DOM 稳定) -->
               <div class="flex items-center">
-                <span x-show="app.state === 'running'" class="badge badge-success gap-1 font-semibold text-xs py-2.5 px-2.5 shadow-sm">
+                <span x-show="app.state === 'running'"
+                  class="badge badge-success gap-1 font-semibold text-xs py-2.5 px-2.5 shadow-sm">
                   <span class="w-1.5 h-1.5 rounded-full bg-success-content animate-pulse"></span> RUNNING
                 </span>
-                <span x-show="app.state === 'starting'" class="badge badge-warning gap-1 font-semibold text-xs py-2.5 px-2.5 shadow-sm">
+                <span x-show="app.state === 'starting'"
+                  class="badge badge-warning gap-1 font-semibold text-xs py-2.5 px-2.5 shadow-sm">
                   <span class="loading loading-spinner loading-xs"></span> STARTING
                 </span>
-                <span x-show="app.state === 'crashed'" class="badge badge-error gap-1 font-semibold text-xs py-2.5 px-2.5 shadow-sm">
+                <span x-show="app.state === 'crashed'"
+                  class="badge badge-error gap-1 font-semibold text-xs py-2.5 px-2.5 shadow-sm">
                   CRASHED
                 </span>
                 <span x-show="app.state === 'stopped'" class="badge badge-ghost text-xs py-2.5 px-2.5">
@@ -92,28 +125,48 @@
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-1.5 min-w-0 flex-1">
                   <span class="text-primary font-black shrink-0 select-none">$</span>
-                  <code class="text-primary font-semibold truncate select-all" :title="getFullCmd(app)" x-text="getFullCmd(app)"></code>
+                  <code class="text-primary font-semibold truncate select-all" :title="getFullCmd(app)"
+                    x-text="getFullCmd(app)"></code>
                 </div>
-                <button type="button" @click="copyText(getFullCmd(app), '完整运行命令')" 
-                        class="btn btn-ghost btn-xs btn-circle shrink-0 opacity-60 hover:opacity-100" title="复制完整运行命令">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                <button type="button" @click="copyText(getFullCmd(app), '完整运行命令')"
+                  class="btn btn-ghost btn-xs btn-circle shrink-0 opacity-60 hover:opacity-100" title="复制完整运行命令">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                    </path>
+                  </svg>
                 </button>
               </div>
 
-              <div class="flex justify-between items-center text-[11px] pt-2 border-t border-base-content/10 text-base-content/70">
-                <div><span class="text-base-content/40">内部端口:</span> <span class="font-bold text-base-content" x-text="app.port"></span></div>
-                <div><span class="text-base-content/40">空闲超时:</span> <span class="font-bold text-base-content" x-text="app.idle_timeout_sec + 's'"></span></div>
-                <div x-show="app.args && app.args.length"><span class="text-base-content/40">参数数量:</span> <span class="font-bold text-base-content" x-text="(app.args || []).length + ' 个'"></span></div>
+              <div
+                class="flex justify-between items-center text-[11px] pt-2 border-t border-base-content/10 text-base-content/70">
+                <div><span class="text-base-content/40">内部端口:</span> <span class="font-bold text-base-content"
+                    x-text="app.port"></span></div>
+                <div><span class="text-base-content/40">空闲超时:</span> <span class="font-bold text-base-content"
+                    x-text="app.idle_timeout_sec + 's'"></span></div>
+                <div x-show="app.args && app.args.length"><span class="text-base-content/40">参数数量:</span> <span
+                    class="font-bold text-base-content" x-text="(app.args || []).length + ' 个'"></span></div>
+              </div>
+              <div class="flex justify-between items-center gap-3 text-[11px] text-base-content/70">
+                <div class="min-w-0"><span class="text-base-content/40">上次启动:</span> <span
+                    class="font-bold text-base-content" x-text="formatDateTime(app.last_started_at)"></span></div>
+                <div class="shrink-0"><span class="text-base-content/40">耗时:</span> <span
+                    class="font-bold text-base-content" x-text="app.startup_ms + 'ms'"></span></div>
               </div>
             </div>
 
             <!-- 异常状态提示 -->
-            <div x-show="app.state === 'crashed'" class="alert alert-error text-xs py-2 px-3 my-1.5 flex justify-between items-center shadow-sm">
+            <div x-show="app.state === 'crashed'"
+              class="alert alert-error text-xs py-2 px-3 my-1.5 flex justify-between items-center shadow-sm">
               <div class="flex items-center gap-1.5 truncate">
-                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
                 <span class="truncate">启动失败 / 异常退出</span>
               </div>
-              <button type="button" @click="openLogs(app.name)" class="btn btn-xs btn-ghost underline shrink-0">排查原因</button>
+              <button type="button" @click="openLogs(app.name)"
+                class="btn btn-xs btn-ghost underline shrink-0">排查原因</button>
             </div>
 
             <!-- 休眠倒计时 -->
@@ -122,14 +175,28 @@
                 <span class="text-base-content/60">空闲休眠倒计时</span>
                 <span class="text-primary font-bold" x-text="app.remaining_seconds + 's'"></span>
               </div>
-              <progress class="progress progress-primary w-full h-1.5" :value="app.remaining_seconds" :max="app.idle_timeout_sec"></progress>
+              <progress class="progress progress-primary w-full h-1.5" :value="app.remaining_seconds"
+                :max="app.idle_timeout_sec"></progress>
             </div>
 
             <!-- 操作按钮栏 (使用 x-show 保证事件监听不脱落) -->
             <div class="card-actions justify-between items-center mt-2 pt-3 border-t border-base-200">
               <div class="flex gap-1">
-                <button type="button" @click="openLogs(app.name)" class="btn btn-ghost btn-xs gap-1 text-base-content/70">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <button type="button" @click="openAppConfig(app)"
+                  class="btn btn-ghost btn-xs gap-1 text-base-content/70">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M10.5 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4.5M14 4h6m0 0v6m0-6L10 14"></path>
+                  </svg>
+                  配置
+                </button>
+                <button type="button" @click="openLogs(app.name)"
+                  class="btn btn-ghost btn-xs gap-1 text-base-content/70">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                  </svg>
                   日志
                 </button>
                 <button type="button" @click="confirmDeleteApp(app)" class="btn btn-ghost btn-xs text-error">
@@ -139,30 +206,22 @@
 
               <div class="flex items-center gap-1">
                 <!-- 运行状态：显示停止按钮 -->
-                <button type="button" 
-                        x-show="app.state === 'running'"
-                        @click="stopApp(app.name)" 
-                        :disabled="isLoading(app.name)" 
-                        class="btn btn-error btn-outline btn-xs gap-1">
+                <button type="button" x-show="app.state === 'running'" @click="stopApp(app.name)"
+                  :disabled="isLoading(app.name)" class="btn btn-error btn-outline btn-xs gap-1">
                   <span x-show="isLoading(app.name)" class="loading loading-spinner loading-xs"></span>
                   <span>停止</span>
                 </button>
 
                 <!-- 停止或崩溃状态：显示拉起按钮 -->
-                <button type="button" 
-                        x-show="app.state === 'stopped' || app.state === 'crashed'"
-                        @click="startApp(app.name)" 
-                        :disabled="isLoading(app.name)" 
-                        class="btn btn-primary btn-xs gap-1">
+                <button type="button" x-show="app.state === 'stopped' || app.state === 'crashed'"
+                  @click="startApp(app.name)" :disabled="isLoading(app.name)" class="btn btn-primary btn-xs gap-1">
                   <span x-show="isLoading(app.name)" class="loading loading-spinner loading-xs"></span>
                   <span>拉起</span>
                 </button>
 
                 <!-- 启动中过渡状态 -->
-                <button type="button" 
-                        x-show="app.state === 'starting'"
-                        disabled
-                        class="btn btn-warning btn-xs gap-1 opacity-80">
+                <button type="button" x-show="app.state === 'starting'" disabled
+                  class="btn btn-warning btn-xs gap-1 opacity-80">
                   <span class="loading loading-spinner loading-xs"></span>
                   <span>启动中...</span>
                 </button>
@@ -172,6 +231,119 @@
         </div>
       </template>
     </div>
+
+    <!-- 应用配置 Modal -->
+    <dialog id="config_modal" class="modal">
+      <div class="modal-box w-11/12 max-w-3xl">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-lg">应用配置</h3>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeAppConfig()">✕</button>
+        </div>
+
+        <div role="tablist" class="tabs tabs-boxed mb-4">
+          <button type="button" role="tab" class="tab" :class="configMode === 'edit' && 'tab-active'"
+            @click="configMode = 'edit'">编辑</button>
+          <button type="button" role="tab" class="tab" :class="configMode === 'yaml' && 'tab-active'"
+            @click="configMode = 'yaml'">YAML</button>
+          <button type="button" role="tab" class="tab" :class="configMode === 'shell' && 'tab-active'"
+            @click="configMode = 'shell'">Shell</button>
+        </div>
+
+        <div x-show="configLoading" class="flex justify-center py-12">
+          <span class="loading loading-spinner loading-md text-primary"></span>
+        </div>
+
+        <form x-show="!configLoading && configMode === 'edit'" @submit.prevent="saveAppConfig()" class="space-y-4">
+          <div class="form-control">
+            <label class="label py-1 text-xs font-semibold">
+              <span>应用标识（name）</span>
+              <span class="badge badge-primary badge-sm font-mono font-bold shadow-sm" x-text="editConfig.name"></span>
+            </label>
+          </div>
+          <div class="form-control gap-1">
+            <label class="label py-1 text-xs font-semibold">应用类型（app_type）</label>
+            <select x-model="editConfig.app_type" class="select select-bordered select-md w-full">
+              <option value="">通用</option>
+              <option value="phx">Phoenix</option>
+              <option value="python">Python</option>
+              <option value="node">Node.js</option>
+              <option value="bun">Bun</option>
+            </select>
+          </div>
+          <div class="form-control gap-1">
+            <label class="label py-1 text-xs font-semibold">工作目录（cwd）</label>
+            <input type="text" x-model="editConfig.cwd" class="input input-bordered input-md w-full font-mono"
+              required />
+          </div>
+          <div class="form-control gap-1">
+            <label class="label py-1 text-xs font-semibold">启动命令（cmd）</label>
+            <input type="text" x-model="editConfig.cmd" class="input input-bordered input-md w-full font-mono"
+              required />
+          </div>
+          <div class="form-control">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">启动参数（args）</label>
+              <button type="button" @click="editConfig.args.push('')" class="btn btn-ghost btn-xs">+ 添加参数</button>
+            </div>
+            <div class="space-y-1">
+              <template x-for="(arg, index) in editConfig.args" :key="index">
+                <div class="join w-full">
+                  <input type="text" x-model="editConfig.args[index]"
+                    class="input input-bordered input-sm join-item w-full font-mono"
+                    placeholder="例如 -m 或 http.server $PORT" />
+                  <button type="button" @click="editConfig.args.splice(index, 1)"
+                    class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">环境变量（env）</label>
+              <button type="button" @click="addEnvEntry()" class="btn btn-ghost btn-xs">+ 添加变量</button>
+            </div>
+            <div class="space-y-1">
+              <template x-for="(entry, index) in envEntries" :key="index">
+                <div class="join w-full">
+                  <input type="text" x-model="entry.key" class="input input-bordered input-sm join-item w-2/5 font-mono"
+                    placeholder="KEY" />
+                  <input type="text" x-model="entry.value"
+                    class="input input-bordered input-sm join-item w-full font-mono" placeholder="VALUE" />
+                  <button type="button" @click="removeEnvEntry(index)"
+                    class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="form-control">
+            <label class="label text-xs font-semibold">空闲休眠超时（idle_timeout）</label>
+            <input type="text" x-model="editConfig.idle_timeout" class="input input-bordered input-sm font-mono"
+              placeholder="例如 10m" required />
+          </div>
+          <div class="modal-action">
+            <button type="button" class="btn btn-sm btn-ghost" @click="closeAppConfig()">取消</button>
+            <button type="submit" class="btn btn-sm btn-primary" :disabled="configSaving">
+              <span x-show="configSaving" class="loading loading-spinner loading-xs"></span>保存配置
+            </button>
+          </div>
+        </form>
+
+        <div x-show="!configLoading && (configMode === 'yaml' || configMode === 'shell')">
+          <div class="flex justify-end mb-2">
+            <button type="button" class="btn btn-xs btn-outline"
+              @click="copyText(configMode === 'yaml' ? configYaml : configShell, configMode === 'yaml' ? 'YAML 配置' : 'Shell 命令')">
+              复制
+            </button>
+          </div>
+          <pre
+            class="bg-neutral text-neutral-content p-4 rounded-lg max-h-96 overflow-auto whitespace-pre-wrap break-all text-xs leading-relaxed"
+            x-text="configMode === 'yaml' ? configYaml : configShell"></pre>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="closeAppConfig()">关闭</button>
+      </form>
+    </dialog>
 
     <!-- 注册新应用 Modal -->
     <dialog id="add_modal" class="modal">
@@ -183,44 +355,81 @@
 
         <!-- 常用模板快捷填入 -->
         <div class="mb-4">
-          <span class="text-xs text-base-content/60 block mb-1.5">常用命令快捷预设：</span>
+          <button type="button" @click="registerFromYAML()" class="btn btn-sm btn-secondary w-full mb-3">
+            选择 app.yaml 目录注册
+          </button>
+          <span class="text-xs text-base-content/60 block mb-1.5">常用应用模版</span>
           <div class="flex flex-wrap gap-1.5">
-            <button type="button" @click="fillPreset('python')" class="btn btn-xs btn-outline">Python HTTP</button>
-            <button type="button" @click="fillPreset('npm')" class="btn btn-xs btn-outline">Node / Vite</button>
-            <button type="button" @click="fillPreset('bun')" class="btn btn-xs btn-outline">Bun Dev</button>
-            <button type="button" @click="fillPreset('phx')" class="btn btn-xs btn-outline">Phoenix (Elixir)</button>
+            <template x-for="preset in app_templates" :key="preset.id">
+              <button type="button" @click="fillPreset(preset)" class="btn btn-xs btn-outline"
+                x-text="preset.label"></button>
+            </template>
           </div>
         </div>
 
         <form @submit.prevent="submitApp()">
           <div class="form-control mb-3">
-            <label class="label text-xs font-semibold">应用标识 (Subdomain) *</label>
+            <label class="label text-xs font-semibold">应用标识（name）*</label>
             <div class="join w-full">
-              <input type="text" x-model="form.name" placeholder="my-app" class="input input-bordered input-sm join-item w-full font-mono" required />
-              <span class="btn btn-sm btn-disabled join-item">.lab:8080</span>
+              <input type="text" x-model="form.name" placeholder="my-app"
+                class="input input-bordered input-sm join-item w-full font-mono" required />
+              <span class="btn btn-sm btn-disabled join-item"
+                x-text="currentSuffixStr() + (window.location.port ? ':' + window.location.port : '')"></span>
             </div>
           </div>
           <div class="form-control mb-3">
-            <label class="label text-xs font-semibold">项目绝对路径 (Path) *</label>
-            <input type="text" x-model="form.path" placeholder="/Users/rj/projects/demo" class="input input-bordered input-sm font-mono" required />
+            <label class="label text-xs font-semibold">应用类型（app_type）</label>
+            <select x-model="form.app_type" class="select select-bordered select-sm w-full">
+              <option value="">通用</option>
+              <option value="phx">Phoenix</option>
+              <option value="python">Python</option>
+              <option value="node">Node.js</option>
+              <option value="bun">Bun</option>
+            </select>
           </div>
           <div class="form-control mb-3">
-            <label class="label text-xs font-semibold">启动命令 (Cmd) *</label>
-            <input type="text" x-model="form.cmd" placeholder="python3 / mix / npm / cargo" class="input input-bordered input-sm font-mono" required />
+            <label class="label text-xs font-semibold">工作目录（cwd）*</label>
+            <input type="text" x-model="form.cwd" placeholder="/Users/rj/projects/demo"
+              class="input input-bordered input-sm font-mono" required />
+          </div>
+          <div class="form-control mb-3">
+            <label class="label text-xs font-semibold">启动命令（cmd）*</label>
+            <input type="text" x-model="form.cmd" placeholder="python3 / mix / npm / cargo"
+              class="input input-bordered input-sm font-mono" required />
           </div>
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
-              <label class="label text-xs font-semibold">启动参数 (Args)</label>
+              <label class="label text-xs font-semibold">启动参数（args）</label>
               <span class="text-[10px] text-base-content/50 font-mono">支持 $PORT 变量</span>
             </div>
-            <input type="text" x-model="form.argsInput" placeholder="-m http.server $PORT" class="input input-bordered input-sm font-mono" />
+            <input type="text" x-model="form.argsInput" placeholder="-m http.server $PORT"
+              class="input input-bordered input-sm font-mono" />
+          </div>
+          <div class="form-control mb-3">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">环境变量（env）</label>
+              <button type="button" @click="addRegisterEnvEntry()" class="btn btn-ghost btn-xs">+ 添加变量</button>
+            </div>
+            <div class="space-y-1">
+              <template x-for="(entry, index) in registerEnvEntries" :key="index">
+                <div class="join w-full">
+                  <input type="text" x-model="entry.key" class="input input-bordered input-sm join-item w-2/5 font-mono"
+                    placeholder="KEY" />
+                  <input type="text" x-model="entry.value"
+                    class="input input-bordered input-sm join-item w-full font-mono" placeholder="VALUE" />
+                  <button type="button" @click="removeRegisterEnvEntry(index)"
+                    class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
           </div>
           <div class="form-control mb-5">
             <div class="flex justify-between items-center">
-              <label class="label text-xs font-semibold">空闲休眠超时 (Idle Timeout)</label>
+              <label class="label text-xs font-semibold">空闲休眠超时（idle_timeout）</label>
               <span class="text-[10px] text-base-content/50 font-mono">如 5m, 30m, 1h</span>
             </div>
-            <input type="text" x-model="form.idle_timeout" placeholder="5m" class="input input-bordered input-sm font-mono" />
+            <input type="text" x-model="form.idle_timeout" placeholder="5m"
+              class="input input-bordered input-sm font-mono" />
           </div>
           <div class="modal-action">
             <button type="button" class="btn btn-sm btn-ghost" @click="closeAddModal()">取消</button>
@@ -237,11 +446,16 @@
     <dialog id="delete_modal" class="modal">
       <div class="modal-box max-w-sm">
         <h3 class="font-bold text-base text-error flex items-center gap-2">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+            </path>
+          </svg>
           确认注销应用？
         </h3>
         <p class="py-3 text-xs text-base-content/70">
-          确定注销应用 <span class="font-bold text-base-content font-mono" x-text="appToDelete?.name"></span> 吗？这将终止其后台进程并从持久化列表中移除。
+          确定注销应用 <span class="font-bold text-base-content font-mono" x-text="appToDelete?.name"></span>
+          吗？这将终止其后台进程并从持久化列表中移除。
         </p>
         <div class="modal-action">
           <button type="button" class="btn btn-sm btn-ghost" @click="closeDeleteModal()">取消</button>
@@ -259,7 +473,7 @@
         <div class="flex justify-between items-center mb-3">
           <h3 class="font-bold text-sm text-primary flex items-center gap-2">
             <span class="w-2 h-2 rounded-full bg-success animate-ping"></span>
-            <span x-text="logAppName + '.lab 日志追踪'"></span>
+            <span x-text="logAppName + currentSuffixStr() + ' 日志追踪'"></span>
           </h3>
           <div class="flex items-center gap-2">
             <label class="label cursor-pointer gap-1.5 text-xs text-neutral-content/70">
@@ -270,7 +484,9 @@
             <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeLogs()">✕</button>
           </div>
         </div>
-        <pre class="bg-black/90 p-4 rounded-lg h-96 overflow-y-auto whitespace-pre-wrap break-all text-green-400 leading-relaxed border border-white/10 font-mono" id="log_content" x-text="logText"></pre>
+        <pre
+          class="bg-black/90 p-4 rounded-lg h-96 overflow-y-auto whitespace-pre-wrap break-all text-green-400 leading-relaxed border border-white/10 font-mono"
+          id="log_content" x-text="logText"></pre>
       </div>
       <form method="dialog" class="modal-backdrop">
         <button @click="closeLogs()">关闭</button>
@@ -281,17 +497,18 @@
   <!-- 全局 Toast 提示容器 -->
   <div class="toast toast-end toast-bottom z-50 p-4 space-y-2">
     <template x-for="t in toasts" :key="t.id">
-      <div class="alert shadow-lg text-xs py-2.5 px-4 flex items-center gap-2 cursor-pointer transition-all duration-300 transform translate-y-0"
-           :class="{
+      <div
+        class="alert shadow-lg text-xs py-2.5 px-4 flex items-center gap-2 cursor-pointer transition-all duration-300 transform translate-y-0"
+        :class="{
              'alert-success text-success-content': t.type === 'success',
              'alert-error text-error-content': t.type === 'error',
              'alert-info text-info-content': t.type === 'info',
              'alert-warning text-warning-content': t.type === 'warning'
-           }"
-           @click="removeToast(t.id)">
+           }" @click="removeToast(t.id)">
         <span x-text="t.message"></span>
       </div>
     </template>
   </div>
 </body>
+
 </html>

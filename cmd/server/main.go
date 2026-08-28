@@ -2,38 +2,42 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/cao7113/gater/entry"
+	"github.com/cao7113/gater/internal/config"
 	"github.com/cao7113/gater/internal/manager"
 	"github.com/cao7113/gater/internal/store"
 	"github.com/cao7113/gater/internal/version"
+	"github.com/spf13/pflag"
 )
 
 const (
 	defaultPort      = "8080"
 	defaultAdminHost = "admin.lab"
-	defaultStorePath = "~/.config/gater/store.json"
+	defaultStorePath = "~/.config/gater/store.yaml"
 	shutdownTimeout  = 5 * time.Second
 )
 
 type options struct {
-	port      string
-	storePath string
-	adminHost string
+	port        string
+	storePath   string
+	adminHost   string
+	suffixes    []config.AppSuffix
+	showVersion bool
 }
 
 func main() {
-	showVersion := flag.Bool("version", false, "显示版本")
 	opts := parseOptions()
-	if *showVersion {
+
+	if opts.showVersion {
 		fmt.Println(version.String())
 		return
 	}
@@ -47,7 +51,7 @@ func main() {
 	}
 
 	mgr := manager.New(ctx, st)
-	server := entry.New(entry.Config{Port: opts.port, AdminHost: opts.adminHost}, mgr)
+	server := entry.New(entry.Config{Port: opts.port, AdminHost: opts.adminHost, StorePath: opts.storePath, AppSuffixes: opts.suffixes}, mgr)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
@@ -73,18 +77,41 @@ func main() {
 }
 
 func parseOptions() options {
+	defaultSuffixesStr := env("GATER_SUFFIXES", "")
+
 	defaults := options{
 		port:      env("PORT", defaultPort),
 		storePath: env("GATER_STORE", defaultStorePath),
 		adminHost: env("ADMIN_HOST", defaultAdminHost),
 	}
 
-	port := flag.String("port", defaults.port, "HTTP 服务端口")
-	storePath := flag.String("store", defaults.storePath, "应用注册表文件路径")
-	adminHost := flag.String("admin-host", defaults.adminHost, "管理控制台域名")
-	flag.Parse()
+	flags := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "用法: %s [选项]\n\n选项:\n", os.Args[0])
+		flags.PrintDefaults()
+	}
+	showVersion := flags.BoolP("version", "v", false, "显示版本")
+	port := flags.StringP("port", "p", defaults.port, "HTTP 服务端口")
+	storePath := flags.StringP("store", "s", defaults.storePath, "应用注册表文件路径")
+	adminHost := flags.StringP("admin-host", "a", defaults.adminHost, "管理控制台域名")
+	suffixesStr := flags.String("suffixes", defaultSuffixesStr,
+		`代理加载时识别应用的 hostname 后缀列表，逗号分隔（例: .lab.s,.lab,.l.h 或 https:.lab.s,http:.lab）。为空时使用内置默认列表`)
 
-	return options{port: *port, storePath: expandHome(*storePath), adminHost: *adminHost}
+	flags.Parse(os.Args[1:])
+
+	var suffixes []config.AppSuffix
+	if *suffixesStr != "" {
+		for _, s := range strings.Split(*suffixesStr, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				suffixes = append(suffixes, config.ParseAppSuffix(s))
+			}
+		}
+	}
+	return options{
+		port: *port, storePath: expandHome(*storePath),
+		adminHost: *adminHost, showVersion: *showVersion,
+		suffixes: suffixes,
+	}
 }
 
 func env(key, fallback string) string {

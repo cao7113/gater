@@ -10,17 +10,59 @@ Alpine.data('dashboard', () => ({
   toasts: [],
   actionLoading: {},
   appToDelete: null,
+  configApp: null,
+  configMode: 'edit',
+  configLoading: false,
+  configSaving: false,
+  configYaml: '',
+  configShell: '',
+  editConfig: { name: '', app_type: '', cwd: '', cmd: '', args: [], idle_timeout: '', env: {} },
+  envEntries: [],
+  registerEnvEntries: [],
+  appSuffixes: [],
+  app_templates: [],
+  selectedSuffix: null,
   form: {
     name: '',
-    path: '',
+    cwd: '',
+    app_type: '',
     cmd: '',
     argsInput: '',
     idle_timeout: '5m'
   },
 
   init() {
+    this.fetchConfig();
     this.fetchApps();
     setInterval(() => this.fetchApps(), 2000);
+  },
+
+  async fetchConfig() {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        const suffixes = (data.app_suffixes || []).map(item => {
+          if (typeof item === 'string') {
+            return { suffix: item, scheme: 'http' };
+          }
+          return { suffix: item.suffix, scheme: item.scheme || 'http' };
+        });
+        if (suffixes.length > 0) {
+          this.appSuffixes = suffixes;
+          if (!this.selectedSuffix || !this.appSuffixes.some(s => s.suffix === this.selectedSuffix.suffix)) {
+            this.selectedSuffix = this.appSuffixes[0];
+          }
+        }
+        this.app_templates = data.app_templates || [];
+      }
+    } catch (e) {
+      console.warn('[gater] 获取 /api/config 失败，使用默认后缀配置', e);
+    }
+  },
+
+  currentSuffixStr() {
+    return this.selectedSuffix ? this.selectedSuffix.suffix : (this.appSuffixes.length > 0 ? this.appSuffixes[0].suffix : '.lab.s');
   },
 
   showToast(message, type = 'info', duration = 3500) {
@@ -52,6 +94,23 @@ Alpine.data('dashboard', () => ({
     return args ? `${app.cmd} ${args}` : app.cmd;
   },
 
+  formatDateTime(value) {
+    if (!value) return '未启动';
+    return new Date(value).toLocaleString();
+  },
+
+  getAppURL(name) {
+    const item = this.selectedSuffix || (this.appSuffixes.length > 0 ? this.appSuffixes[0] : { suffix: '.lab.s', scheme: 'https' });
+    const scheme = item.scheme ? `${item.scheme}:` : 'http:';
+    const port = window.location.port ? `:${window.location.port}` : '';
+    return `${scheme}//${name}${item.suffix}${port}`;
+  },
+
+  getAppDomain(name) {
+    const suffix = this.selectedSuffix || this.appSuffixes[0];
+    return suffix ? `${name}${suffix.suffix}` : '';
+  },
+
   isLoading(name) {
     return !!(this.actionLoading && this.actionLoading[name]);
   },
@@ -66,6 +125,96 @@ Alpine.data('dashboard', () => ({
     }
   },
 
+  async openAppConfig(app) {
+    this.configApp = app;
+    this.configMode = 'edit';
+    this.configLoading = true;
+    this.configYaml = '';
+    this.configShell = '';
+    this.editConfig = {
+      name: app.name,
+      app_type: app.app_type || '',
+      cwd: app.cwd,
+      cmd: app.cmd,
+      args: [...(app.args || [])],
+      idle_timeout: app.idle_timeout_sec ? `${app.idle_timeout_sec}s` : '',
+      env: { ...(app.env || {}) }
+    };
+    this.envEntries = Object.entries(this.editConfig.env).map(([key, value]) => ({ key, value }));
+    document.getElementById('config_modal')?.showModal();
+    try {
+      const res = await fetch(`/api/apps/${encodeURIComponent(app.name)}/config`);
+      if (res.ok) {
+        const data = await res.json();
+        this.configYaml = data.yaml || '';
+        this.configShell = data.shell || '';
+      }
+    } catch (e) {
+      this.showToast('读取配置失败: ' + e.message, 'error');
+    } finally {
+      this.configLoading = false;
+    }
+  },
+
+  addEnvEntry() {
+    this.envEntries.push({ key: '', value: '' });
+  },
+
+  removeEnvEntry(index) {
+    this.envEntries.splice(index, 1);
+  },
+
+  addRegisterEnvEntry() {
+    this.registerEnvEntries.push({ key: '', value: '' });
+  },
+
+  removeRegisterEnvEntry(index) {
+    this.registerEnvEntries.splice(index, 1);
+  },
+
+  async saveAppConfig() {
+    const env = {};
+    for (const entry of this.envEntries) {
+      const key = entry.key.trim();
+      if (key) env[key] = entry.value;
+    }
+    const payload = {
+      name: this.editConfig.name,
+      app_type: this.editConfig.app_type.trim(),
+      cwd: this.editConfig.cwd.trim(),
+      cmd: this.editConfig.cmd.trim(),
+      args: this.editConfig.args,
+      env,
+      idle_timeout: this.editConfig.idle_timeout.trim()
+    };
+    this.configSaving = true;
+    try {
+      const res = await fetch(`/api/apps/${encodeURIComponent(payload.name)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        this.showToast('保存失败: ' + (data.error || res.statusText), 'error');
+        return;
+      }
+      this.showToast(`应用 [${payload.name}] 配置已保存`, 'success');
+      await this.fetchApps();
+      const updated = this.apps.find(item => item.name === payload.name);
+      if (updated) await this.openAppConfig(updated);
+    } catch (e) {
+      this.showToast('保存配置失败: ' + e.message, 'error');
+    } finally {
+      this.configSaving = false;
+    }
+  },
+
+  closeAppConfig() {
+    document.getElementById('config_modal')?.close();
+    this.configApp = null;
+  },
+
   openAddModal() {
     const modal = document.getElementById('add_modal');
     if (modal) modal.showModal();
@@ -76,46 +225,84 @@ Alpine.data('dashboard', () => ({
     if (modal) modal.close();
   },
 
-  fillPreset(type) {
-    if (type === 'python') {
-      this.form.cmd = 'python3';
-      this.form.argsInput = '-m http.server $PORT';
-      this.form.idle_timeout = '5m';
-    } else if (type === 'npm') {
-      this.form.cmd = 'npm';
-      this.form.argsInput = 'run dev -- --port $PORT';
-      this.form.idle_timeout = '15m';
-    } else if (type === 'phx') {
-      this.form.cmd = 'mix';
-      this.form.argsInput = 'phx.server';
-      this.form.idle_timeout = '10m';
-    } else if (type === 'bun') {
-      this.form.cmd = 'bun';
-      this.form.argsInput = 'run dev --port $PORT';
-      this.form.idle_timeout = '15m';
+  async openExistingApp(name) {
+    await this.fetchApps();
+    const existing = this.apps.find(item => item.name === name);
+    if (existing) {
+      this.closeAddModal();
+      await this.openAppConfig(existing);
     }
+  },
+
+  async registerFromYAML() {
+    try {
+      const pickRes = await fetch('/api/fs/pick-folder', { method: 'POST' });
+      const picked = await pickRes.json();
+      if (picked.canceled) return;
+      if (!pickRes.ok || !picked.config) {
+        this.showToast('所选目录没有有效的 app.yaml', 'error');
+        return;
+      }
+
+      const res = await fetch('/api/apps/from-yaml-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: `${picked.path.replace(/\/+$/, '')}/app.yaml` })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          this.showToast('应用已存在，请修改现有配置', 'warning');
+          await this.openExistingApp(picked.config.name);
+          return;
+        }
+        this.showToast('注册失败: ' + (data.error || res.statusText), 'error');
+        return;
+      }
+      this.showToast(`应用 [${picked.config.name}] 注册成功`, 'success');
+      this.closeAddModal();
+      await this.fetchApps();
+    } catch (e) {
+      this.showToast('读取 app.yaml 失败: ' + e.message, 'error');
+    }
+  },
+
+  fillPreset(preset) {
+    const hasValues = this.form.app_type || this.form.cmd || this.form.argsInput || this.registerEnvEntries.some(entry => entry.key || entry.value);
+    if (hasValues && !window.confirm(`当前启动配置不为空，确定使用「${preset.label}」覆盖吗？`)) {
+      return;
+    }
+    this.form.app_type = preset.app_type || '';
+    this.form.cmd = preset.cmd || '';
+    this.form.argsInput = (preset.args || []).join(' ');
+    this.form.idle_timeout = preset.idle_timeout || '5m';
+    this.registerEnvEntries = [];
   },
 
   async submitApp() {
     const name = this.form.name.trim();
-    const path = this.form.path.trim();
+    const cwd = this.form.cwd.trim();
     const cmd = this.form.cmd.trim();
 
-    if (!name || !path || !cmd) {
+    if (!name || !cwd || !cmd) {
       this.showToast('请填写所有必填字段', 'error');
       return;
     }
 
     const payload = {
       name: name,
-      path: path,
+      app_type: this.form.app_type.trim(),
+      cwd,
       cmd: cmd,
       args: this.form.argsInput.trim() ? this.form.argsInput.trim().split(/\s+/) : [],
+      env: Object.fromEntries(this.registerEnvEntries
+        .map(entry => [entry.key.trim(), entry.value])
+        .filter(([key]) => key)),
       idle_timeout: this.form.idle_timeout.trim() || '5m'
     };
 
     try {
-      const res = await fetch('/api/apps', {
+      const res = await fetch('/api/apps/from-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -123,12 +310,18 @@ Alpine.data('dashboard', () => ({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          this.showToast('应用已存在，请修改现有配置', 'warning');
+          await this.openExistingApp(name);
+          return;
+        }
         this.showToast('注册失败: ' + (errorData.error || res.statusText), 'error');
         return;
       }
 
       this.showToast(`应用 [${name}] 注册成功`, 'success');
-      this.form = { name: '', path: '', cmd: '', argsInput: '', idle_timeout: '5m' };
+      this.form = { name: '', cwd: '', app_type: '', cmd: '', argsInput: '', idle_timeout: '5m' };
+      this.registerEnvEntries = [];
       this.closeAddModal();
       await this.fetchApps();
     } catch (e) {
@@ -169,9 +362,14 @@ Alpine.data('dashboard', () => ({
   },
 
   async startApp(name) {
+    const domain = this.getAppDomain(name);
+    if (!domain) {
+      this.showToast('尚未获取应用域名后缀，无法启动', 'error');
+      return;
+    }
     this.actionLoading = { ...this.actionLoading, [name]: true };
     try {
-      const res = await fetch(`/api/apps/${encodeURIComponent(name)}/start`, { method: 'POST' });
+      const res = await fetch(`/api/apps/${encodeURIComponent(name)}/start?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
       if (res.ok) {
         this.showToast(`应用 [${name}] 已成功拉起`, 'success');
       } else {

@@ -1,25 +1,18 @@
 package store
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
-)
 
-type AppSpec struct {
-	Name        string            `json:"name"`
-	Path        string            `json:"path"`
-	Cmd         string            `json:"cmd"`
-	Args        []string          `json:"args"`
-	Env         map[string]string `json:"env"`
-	IdleTimeout string            `json:"idle_timeout"` // e.g. "5m", "1h"
-}
+	"github.com/cao7113/gater/internal/config"
+	"gopkg.in/yaml.v3"
+)
 
 type Store struct {
 	mu       sync.Mutex
 	filePath string
-	Apps     map[string]AppSpec `json:"apps"`
+	Apps     map[string]config.AppConfig `json:"apps"`
 }
 
 func NewStore(paths ...string) (*Store, error) {
@@ -33,40 +26,36 @@ func NewStore(paths ...string) (*Store, error) {
 
 	s := &Store{
 		filePath: filePath,
-		Apps:     make(map[string]AppSpec),
+		Apps:     make(map[string]config.AppConfig),
 	}
 	_ = s.load()
 	return s, nil
 }
 
-func storePath(paths ...string) (string, error) {
-	if len(paths) > 0 && paths[0] != "" {
-		return paths[0], nil
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "gater", "store.json"), nil
-}
-
-func (s *Store) load() error {
+func (s *Store) List() map[string]config.AppConfig {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	data, err := os.ReadFile(s.filePath)
-	if err != nil {
-		return err
+	res := make(map[string]config.AppConfig)
+	for k, v := range s.Apps {
+		res[k] = v
 	}
-	return json.Unmarshal(data, &s.Apps)
+	return res
 }
 
-func (s *Store) Save(spec AppSpec) error {
+func (s *Store) Get(name string) (config.AppConfig, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.Apps[spec.Name] = spec
+	ac, ok := s.Apps[name]
+	return ac, ok
+}
+
+func (s *Store) Save(ac config.AppConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.Apps[ac.Name] = ac
 	return s.persist()
 }
 
@@ -78,29 +67,40 @@ func (s *Store) Delete(name string) error {
 	return s.persist()
 }
 
-func (s *Store) Get(name string) (AppSpec, bool) {
+func (s *Store) Content() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	spec, ok := s.Apps[name]
-	return spec, ok
-}
-
-func (s *Store) List() map[string]AppSpec {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	res := make(map[string]AppSpec)
-	for k, v := range s.Apps {
-		res[k] = v
-	}
-	return res
+	return os.ReadFile(s.filePath)
 }
 
 func (s *Store) persist() error {
-	data, err := json.MarshalIndent(s.Apps, "", "  ")
+	data, err := yaml.Marshal(s.Apps)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(s.filePath, data, 0644)
+}
+
+func (s *Store) load() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := os.ReadFile(s.filePath)
+	if err != nil {
+		return err
+	}
+	return yaml.Unmarshal(data, &s.Apps)
+}
+
+func storePath(paths ...string) (string, error) {
+	if len(paths) > 0 && paths[0] != "" {
+		return paths[0], nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "gater", "store.yaml"), nil
 }
