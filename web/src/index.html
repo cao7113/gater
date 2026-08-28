@@ -45,22 +45,6 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <!-- 域名后缀选择器 -->
-        <template x-if="appSuffixes && appSuffixes.length > 0">
-          <div class="flex items-center gap-1.5 bg-base-100 px-3 py-1.5 rounded-lg border border-base-200 shadow-sm">
-            <span class="text-xs text-base-content/60 font-semibold hidden md:inline">域名后缀:</span>
-            <div class="join">
-              <template x-for="item in appSuffixes" :key="item.suffix">
-                <button type="button" class="btn btn-xs join-item font-mono transition-all"
-                  :class="selectedSuffix && selectedSuffix.suffix === item.suffix ? 'btn-primary shadow-sm font-bold' : 'btn-ghost text-base-content/70 hover:text-base-content'"
-                  @click="selectedSuffix = item" :title="'访问协议: ' + (item.scheme || 'http') + '://'"
-                  x-text="item.suffix">
-                </button>
-              </template>
-            </div>
-          </div>
-        </template>
-
         <div class="text-xs font-mono text-base-content/50 hidden sm:block">
           已注册 <span class="font-bold text-primary" x-text="apps.length"></span> 个应用
         </div>
@@ -89,7 +73,7 @@
                 <h2 class="card-title text-base font-bold">
                   <a :href="getAppURL(app.name)" target="_blank"
                     class="link link-hover link-primary flex items-center gap-1.5" :title="'访问 ' + getAppURL(app.name)">
-                    <span x-text="app.name + currentSuffixStr()"></span>
+                    <span x-text="app.url"></span>
                     <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
@@ -266,8 +250,16 @@
               <option value="">通用</option>
               <option value="phx">Phoenix</option>
               <option value="python">Python</option>
-              <option value="node">Node.js</option>
               <option value="bun">Bun</option>
+            </select>
+          </div>
+          <div class="form-control gap-1">
+            <label class="label py-1 text-xs font-semibold">域名后缀（domain_suffix）</label>
+            <select x-model="editConfig.domain_suffix" class="select select-bordered select-md w-full" required>
+              <template x-for="item in appSuffixes" :key="item.suffix">
+                <option :value="item.suffix" x-text="item.suffix + ' (' + item.scheme + ')'">
+                </option>
+              </template>
             </select>
           </div>
           <div class="form-control gap-1">
@@ -347,7 +339,7 @@
 
     <!-- 注册新应用 Modal -->
     <dialog id="add_modal" class="modal">
-      <div class="modal-box max-w-md">
+      <div class="modal-box w-11/12 max-w-2xl">
         <div class="flex justify-between items-center mb-4">
           <h3 class="font-bold text-lg">注册应用映射</h3>
           <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeAddModal()">✕</button>
@@ -373,8 +365,13 @@
             <div class="join w-full">
               <input type="text" x-model="form.name" placeholder="my-app"
                 class="input input-bordered input-sm join-item w-full font-mono" required />
-              <span class="btn btn-sm btn-disabled join-item"
-                x-text="currentSuffixStr() + (window.location.port ? ':' + window.location.port : '')"></span>
+              <select x-model="form.domain_suffix" class="select select-bordered select-sm join-item font-mono"
+                required>
+                <template x-for="item in appSuffixes" :key="item.suffix">
+                  <option :value="item.suffix" x-text="item.suffix + ' (' + item.scheme + ')'">
+                  </option>
+                </template>
+              </select>
             </div>
           </div>
           <div class="form-control mb-3">
@@ -390,12 +387,12 @@
           <div class="form-control mb-3">
             <label class="label text-xs font-semibold">工作目录（cwd）*</label>
             <input type="text" x-model="form.cwd" placeholder="/Users/rj/projects/demo"
-              class="input input-bordered input-sm font-mono" required />
+              class="input input-bordered input-sm w-full min-w-0 font-mono" required />
           </div>
           <div class="form-control mb-3">
             <label class="label text-xs font-semibold">启动命令（cmd）*</label>
             <input type="text" x-model="form.cmd" placeholder="python3 / mix / npm / cargo"
-              class="input input-bordered input-sm font-mono" required />
+              class="input input-bordered input-sm w-full min-w-0 font-mono" required />
           </div>
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
@@ -403,7 +400,7 @@
               <span class="text-[10px] text-base-content/50 font-mono">支持 $PORT 变量</span>
             </div>
             <input type="text" x-model="form.argsInput" placeholder="-m http.server $PORT"
-              class="input input-bordered input-sm font-mono" />
+              class="input input-bordered input-sm w-full min-w-0 font-mono" />
           </div>
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
@@ -424,9 +421,9 @@
             </div>
           </div>
           <div class="form-control mb-5">
-            <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2">
               <label class="label text-xs font-semibold">空闲休眠超时（idle_timeout）</label>
-              <span class="text-[10px] text-base-content/50 font-mono">如 5m, 30m, 1h</span>
+              <span class="text-[10px] text-base-content/50 font-mono">例如 5m、30m、1h</span>
             </div>
             <input type="text" x-model="form.idle_timeout" placeholder="5m"
               class="input input-bordered input-sm font-mono" />
@@ -473,7 +470,7 @@
         <div class="flex justify-between items-center mb-3">
           <h3 class="font-bold text-sm text-primary flex items-center gap-2">
             <span class="w-2 h-2 rounded-full bg-success animate-ping"></span>
-            <span x-text="logAppName + currentSuffixStr() + ' 日志追踪'"></span>
+            <span x-text="getAppURL(logAppName) + ' 日志追踪'"></span>
           </h3>
           <div class="flex items-center gap-2">
             <label class="label cursor-pointer gap-1.5 text-xs text-neutral-content/70">

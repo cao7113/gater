@@ -50,7 +50,11 @@ func main() {
 		log.Fatalf("初始化存储层失败: %v", err)
 	}
 
-	mgr := manager.New(ctx, st)
+	var suffixes []config.AppSuffix
+	if len(opts.suffixes) > 0 {
+		suffixes = opts.suffixes
+	}
+	mgr := manager.New(ctx, st, suffixes)
 	server := entry.New(entry.Config{Port: opts.port, AdminHost: opts.adminHost, StorePath: opts.storePath, AppSuffixes: opts.suffixes}, mgr)
 
 	signals := make(chan os.Signal, 1)
@@ -95,7 +99,7 @@ func parseOptions() options {
 	storePath := flags.StringP("store", "s", defaults.storePath, "应用注册表文件路径")
 	adminHost := flags.StringP("admin-host", "a", defaults.adminHost, "管理控制台域名")
 	suffixesStr := flags.String("suffixes", defaultSuffixesStr,
-		`代理加载时识别应用的 hostname 后缀列表，逗号分隔（例: .lab.s,.lab,.l.h 或 https:.lab.s,http:.lab）。为空时使用内置默认列表`)
+		`代理加载时识别应用的 hostname 后缀列表，逗号分隔（例: .l.s,.lab,.l.h 或 https:.l.s,http:.lab）。为空时使用内置默认列表`)
 
 	flags.Parse(os.Args[1:])
 

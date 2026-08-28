@@ -1,4 +1,5 @@
 name: demo
+domain_suffix: .l.h
 # cwd: "auto-fill"
 cmd: "sh"
 args:

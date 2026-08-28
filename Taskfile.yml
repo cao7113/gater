@@ -20,6 +20,7 @@ tasks:
   rel: |
     task gen
     task b
+    lctl reup lab.gater
     
   rel.snapshot: |
     goreleaser release --snapshot --clean

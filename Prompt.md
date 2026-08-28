@@ -19,15 +19,59 @@
 
 ## todo
 
-- preset app tmpls
-- domain belongs to app when start but can change
-- beautiful docs
-- gater run mode: dev or prod?
-- what relationship app-log and gater-log
+- copy app config from exited app with new name in register form
 - improve exec model
   - pre-hook and env setup
 - livebook app
+- beautiful docs
+- gater run mode: dev or prod? with standalone store path
+- what relationship app-log and gater-log
 - apps registry
+- app target host config, now only 127.0.0.1
+
+## AppType specific extensions / hooks
+
+- refactor app type Common interface to impl. PHX inject logic
+- app type match with app templ and keep simple!
+
+目前App的运行模型 基本都在 app.EnsureStarted
+
+准备基于config.Config.AppType的值（目前可能为： phx，bun等）进行 应用运行机制扩展，插入某些应用配置逻辑
+如：
+- 运行前 执行preHook 检查和准备环境
+- 运行时 插入特定的环境变量，如 PHX_HOST for phx
+- postHook
+
+将这个值配合appTemplate进行扩充，因为一般 内置应用都有配置模版，不过这可以放到第二步，先设计前面的hook 插入机制
+先分析用什么技术方案 易懂好理解又足够灵活
+
+## App host domain name
+
+- App respect Config port first, then auto-gen
+- host domain name config when deploy other than config???
+- app uniqueness by app-name other than app-domain?
+
+优化App的host domain管理，目前状况
+- 应用的访问域名 是根据 顶部的域名后缀 选择来动态生成的，没必要且不应该，域名后缀应该属于app的属性之一
+- 考虑在App中增加domain_suffix字段，用于存储选择的值
+- server 配置添加 允许的后缀 列表，默认为： .l.h (for http), .l.s (for https)
+- 在注册表单，cli client注册时要明确指定 域名后缀，编辑页面允许修改，检查在允许列表中
+- 重构页面展示逻辑，直接通过 app name和 domain_suffix 即可 生成 url并展示，可以移除顶部的域名选择和对应逻辑
+- 同理考虑是否应该 增加 scheme字段，目前暂不支持
+
+目前暂不考虑同一个 app 多域名问题，在域名层解决就行
+
+先评估方案合理性并优化方案
+
+有个设计权衡，现实中不太可能出现demo.l.h和demo.l.s，因为注册时就会发现有同名应用了，通过不同的name解决类似需求。之前考虑过使用域名唯一解决，感觉方案有点复杂，而且域名本身可通过域名解析层重定向，这里只处理底层应用启动需求
+
+真实设计是：
+App 名称是注册表中的唯一标识
+不考虑同名 App 使用不同后缀并存
+domain_suffix 只是 App 的访问配置和默认展示信息
+域名层负责解析、转发或重定向
+Gater 只负责根据最终请求找到 App、按需启动底层服务
+Gater 不需要额外维护复杂的“域名唯一性”或“请求后缀必须等于 App 后缀”规则
 
 ## 预制应用模版
 

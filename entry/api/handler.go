@@ -95,6 +95,10 @@ func (h *handler) createAppFromConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "应用配置无效: "+err.Error())
 		return
 	}
+	if err := config.ValidateDomainSuffix(cfg.DomainSuffix, h.mgr.AppSuffixes()); err != nil {
+		writeError(w, http.StatusBadRequest, "应用配置无效: "+err.Error())
+		return
+	}
 	if err := h.mgr.RegisterApp(cfg); err != nil {
 		if errors.Is(err, manager.ErrAppExists) {
 			writeError(w, http.StatusConflict, err.Error())
@@ -124,6 +128,10 @@ func (h *handler) updateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg.Name = name
+	if err := config.ValidateDomainSuffix(cfg.DomainSuffix, h.mgr.AppSuffixes()); err != nil {
+		writeError(w, http.StatusBadRequest, "应用配置无效: "+err.Error())
+		return
+	}
 	if err := h.mgr.UpdateApp(name, cfg); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -210,12 +218,7 @@ func (h *handler) startApp(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	domain := strings.TrimSpace(r.URL.Query().Get("domain"))
-	if domain == "" {
-		writeError(w, http.StatusBadRequest, "domain is required")
-		return
-	}
-	if err := application.EnsureStarted(ctx, domain); err != nil {
+	if err := application.EnsureStarted(ctx); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -242,6 +245,8 @@ func appToInfo(a *app.App) AppInfo {
 	}
 	return AppInfo{
 		Name:             a.Config.Name,
+		DomainSuffix:     a.Config.DomainSuffix,
+		URL:              a.URL(),
 		AppType:          a.Config.AppType,
 		Cwd:              a.Config.Cwd,
 		Cmd:              a.Config.Cmd,

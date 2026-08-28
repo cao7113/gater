@@ -59,7 +59,6 @@ func (s *serverCtx) ServerConfig() api.ServerConfig {
 
 func route(adminHost string, admin, remote http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// fmt.Println("# Request ", r.Host)
 		host := hostName(r.Host)
 		if host == adminHost || host == "localhost" || host == "127.0.0.1" {
 			admin.ServeHTTP(w, r)

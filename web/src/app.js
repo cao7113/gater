@@ -21,9 +21,9 @@ Alpine.data('dashboard', () => ({
   registerEnvEntries: [],
   appSuffixes: [],
   app_templates: [],
-  selectedSuffix: null,
   form: {
     name: '',
+    domain_suffix: '',
     cwd: '',
     app_type: '',
     cmd: '',
@@ -50,19 +50,13 @@ Alpine.data('dashboard', () => ({
         });
         if (suffixes.length > 0) {
           this.appSuffixes = suffixes;
-          if (!this.selectedSuffix || !this.appSuffixes.some(s => s.suffix === this.selectedSuffix.suffix)) {
-            this.selectedSuffix = this.appSuffixes[0];
-          }
+          if (!this.form.domain_suffix) this.form.domain_suffix = this.appSuffixes[0].suffix;
         }
         this.app_templates = data.app_templates || [];
       }
     } catch (e) {
       console.warn('[gater] 获取 /api/config 失败，使用默认后缀配置', e);
     }
-  },
-
-  currentSuffixStr() {
-    return this.selectedSuffix ? this.selectedSuffix.suffix : (this.appSuffixes.length > 0 ? this.appSuffixes[0].suffix : '.lab.s');
   },
 
   showToast(message, type = 'info', duration = 3500) {
@@ -100,15 +94,7 @@ Alpine.data('dashboard', () => ({
   },
 
   getAppURL(name) {
-    const item = this.selectedSuffix || (this.appSuffixes.length > 0 ? this.appSuffixes[0] : { suffix: '.lab.s', scheme: 'https' });
-    const scheme = item.scheme ? `${item.scheme}:` : 'http:';
-    const port = window.location.port ? `:${window.location.port}` : '';
-    return `${scheme}//${name}${item.suffix}${port}`;
-  },
-
-  getAppDomain(name) {
-    const suffix = this.selectedSuffix || this.appSuffixes[0];
-    return suffix ? `${name}${suffix.suffix}` : '';
+    return this.apps.find(app => app.name === name)?.url || '';
   },
 
   isLoading(name) {
@@ -133,6 +119,7 @@ Alpine.data('dashboard', () => ({
     this.configShell = '';
     this.editConfig = {
       name: app.name,
+      domain_suffix: app.domain_suffix || this.appSuffixes[0]?.suffix || '',
       app_type: app.app_type || '',
       cwd: app.cwd,
       cmd: app.cmd,
@@ -180,6 +167,7 @@ Alpine.data('dashboard', () => ({
     }
     const payload = {
       name: this.editConfig.name,
+      domain_suffix: this.editConfig.domain_suffix,
       app_type: this.editConfig.app_type.trim(),
       cwd: this.editConfig.cwd.trim(),
       cmd: this.editConfig.cmd.trim(),
@@ -201,8 +189,7 @@ Alpine.data('dashboard', () => ({
       }
       this.showToast(`应用 [${payload.name}] 配置已保存`, 'success');
       await this.fetchApps();
-      const updated = this.apps.find(item => item.name === payload.name);
-      if (updated) await this.openAppConfig(updated);
+      this.closeAppConfig();
     } catch (e) {
       this.showToast('保存配置失败: ' + e.message, 'error');
     } finally {
@@ -291,6 +278,7 @@ Alpine.data('dashboard', () => ({
 
     const payload = {
       name: name,
+      domain_suffix: this.form.domain_suffix,
       app_type: this.form.app_type.trim(),
       cwd,
       cmd: cmd,
@@ -362,14 +350,9 @@ Alpine.data('dashboard', () => ({
   },
 
   async startApp(name) {
-    const domain = this.getAppDomain(name);
-    if (!domain) {
-      this.showToast('尚未获取应用域名后缀，无法启动', 'error');
-      return;
-    }
     this.actionLoading = { ...this.actionLoading, [name]: true };
     try {
-      const res = await fetch(`/api/apps/${encodeURIComponent(name)}/start?domain=${encodeURIComponent(domain)}`, { method: 'POST' });
+      const res = await fetch(`/api/apps/${encodeURIComponent(name)}/start`, { method: 'POST' });
       if (res.ok) {
         this.showToast(`应用 [${name}] 已成功拉起`, 'success');
       } else {

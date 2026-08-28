@@ -49,8 +49,8 @@ func (f *fakeMgr) RemoveApp(name string) error  { delete(f.apps, name); return n
 func (f *fakeMgr) StoreConfig() ([]byte, error) { return []byte("demo:\n  name: demo\n"), nil }
 func (f *fakeMgr) AppSuffixes() []config.AppSuffix {
 	return []config.AppSuffix{
-		{Suffix: ".lab.s", Scheme: "https"},
-		{Suffix: ".lab", Scheme: "http"},
+		{Suffix: ".l.h", Scheme: "http"},
+		{Suffix: ".l.s", Scheme: "https"},
 	}
 }
 func (f *fakeMgr) ServerConfig() ServerConfig {
@@ -89,8 +89,8 @@ func TestGetConfig(t *testing.T) {
 	if info.Port != "8080" || info.AdminHost != "admin.lab" || info.StorePath != "~/.config/gater/store.yaml" || len(info.AppSuffixes) != 2 {
 		t.Fatalf("unexpected ServerConfig: %+v", info)
 	}
-	if len(info.AppTemplates) != 3 || info.AppTemplates[0].ID != "phx" || info.AppTemplates[1].ID != "bun" || info.AppTemplates[2].ID != "python" {
-		t.Fatalf("unexpected registration presets: %+v", info.AppTemplates)
+	if len(info.AppTemplates) != 3 || info.AppTemplates[0].ID != config.AppTypePhoenix || info.AppTemplates[1].ID != "bun" || info.AppTemplates[2].ID != "python" {
+		t.Fatalf("unexpected app templates: %+v", info.AppTemplates)
 	}
 }
 
@@ -98,6 +98,7 @@ func TestCreateAppFromConfig(t *testing.T) {
 	mgr := newFakeMgr()
 	req := httptest.NewRequest(http.MethodPost, "/api/apps/from-config", bytes.NewBufferString(`{
 		"name": "phoenix-demo",
+		"domain_suffix": ".l.h",
 		"app_type": "phx",
 		"cwd": "/tmp/phoenix-demo",
 		"cmd": "mix",
@@ -115,8 +116,22 @@ func TestCreateAppFromConfig(t *testing.T) {
 	if !ok {
 		t.Fatal("application was not registered")
 	}
-	if application.Config.AppType != "phx" || application.Config.Cmd != "mix" || application.Config.Cwd != "/tmp/phoenix-demo" {
+	if application.Config.AppType != config.AppTypePhoenix || application.Config.Cmd != "mix" || application.Config.Cwd != "/tmp/phoenix-demo" {
 		t.Fatalf("unexpected registered config: %+v", application.Config)
+	}
+	if application.Config.DomainSuffix != ".l.h" {
+		t.Fatalf("unexpected domain suffix: %q", application.Config.DomainSuffix)
+	}
+}
+
+func TestCreateAppFromConfigRejectsDisallowedSuffix(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/from-config", strings.NewReader(`{
+		"name":"demo","domain_suffix":".invalid","cwd":"/tmp/demo","cmd":"mix","idle_timeout":"10m"
+	}`))
+	res := httptest.NewRecorder()
+	(&handler{mgr: newFakeMgr()}).createAppFromConfig(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", res.Code)
 	}
 }
 
@@ -223,12 +238,13 @@ func TestListAppsStartupInfo(t *testing.T) {
 
 func TestGetAppConfigIncludesYAMLAndShell(t *testing.T) {
 	application := app.NewApp(config.AppConfig{
-		Name:        "myapp",
-		Cwd:         "/tmp/my app's dir",
-		Cmd:         "sh",
-		Args:        []string{"-c", "python3 -m http.server $PORT"},
-		Env:         map[string]string{"FOO": "bar baz", "PORT": "ignored"},
-		IdleTimeout: "10m",
+		Name:         "myapp",
+		DomainSuffix: ".l.h",
+		Cwd:          "/tmp/my app's dir",
+		Cmd:          "sh",
+		Args:         []string{"-c", "python3 -m http.server $PORT"},
+		Env:          map[string]string{"FOO": "bar baz", "PORT": "ignored"},
+		IdleTimeout:  "10m",
 	}, 59001)
 	req := httptest.NewRequest(http.MethodGet, "/api/apps/myapp/config", nil)
 	req.SetPathValue("name", "myapp")

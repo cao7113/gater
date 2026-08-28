@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cao7113/gater/internal/app/types"
 	"github.com/cao7113/gater/internal/config"
 )
 
@@ -49,6 +50,7 @@ func NewApp(ac config.AppConfig, port int) *App {
 		}
 	}
 
+	// todo config
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
 	return &App{
 		Config:     ac,
@@ -61,11 +63,28 @@ func NewApp(ac config.AppConfig, port int) *App {
 	}
 }
 
-func (a *App) EnsureStarted(ctx context.Context, domain string) error {
-	domain = strings.TrimSpace(domain)
-	if domain == "" {
-		return fmt.Errorf("缺少 APP_DOMAIN")
+func (a *App) Domain() string {
+	name := strings.TrimSpace(a.Config.Name)
+	suffix := strings.TrimSpace(a.Config.DomainSuffix)
+	if name == "" || suffix == "" {
+		return ""
 	}
+	return name + suffix
+}
+
+func (a *App) URL(schemes ...string) string {
+	host := a.Domain()
+	if host == "" {
+		return ""
+	}
+	scheme := config.ParseAppSuffix(a.Config.DomainSuffix).Scheme
+	if len(schemes) > 0 && strings.TrimSpace(schemes[0]) != "" {
+		scheme = strings.TrimSpace(schemes[0])
+	}
+	return (&url.URL{Scheme: scheme, Host: host}).String()
+}
+
+func (a *App) EnsureStarted(ctx context.Context) error {
 	a.mu.Lock()
 	a.LastActive = time.Now()
 
@@ -81,6 +100,19 @@ func (a *App) EnsureStarted(ctx context.Context, domain string) error {
 	a.State = StateStarting
 	startTime := time.Now()
 	a.mu.Unlock()
+
+	appTypeContext := a.newAppTypeContext()
+	appTypeHandler := types.HandlerFor(a.Config.AppType)
+	if err := appTypeHandler.Prepare(appTypeContext); err != nil {
+		wrappedErr := fmt.Errorf("准备应用运行环境失败: %w", err)
+		a.markCrashed(wrappedErr)
+		return wrappedErr
+	}
+	if err := appTypeHandler.BeforeStart(ctx, appTypeContext); err != nil {
+		wrappedErr := fmt.Errorf("应用启动前检查失败: %w", err)
+		a.markCrashed(wrappedErr)
+		return wrappedErr
+	}
 
 	// 1. 校验应用工作目录是否存在
 	if fi, err := os.Stat(a.Config.Cwd); err != nil || !fi.IsDir() {
@@ -102,15 +134,7 @@ func (a *App) EnsureStarted(ctx context.Context, domain string) error {
 		return fmt.Errorf("%s", errMsg)
 	}
 
-	var finalArgs []string
-	for _, arg := range a.Config.Args {
-		finalArgs = append(finalArgs, os.Expand(arg, func(k string) string {
-			if k == "PORT" {
-				return fmt.Sprintf("%d", a.Port)
-			}
-			return os.Getenv(k)
-		}))
-	}
+	finalArgs := appTypeContext.Args
 
 	cmd := exec.Command(a.Config.Cmd, finalArgs...)
 	cmd.Dir = a.Config.Cwd
@@ -121,8 +145,7 @@ func (a *App) EnsureStarted(ctx context.Context, domain string) error {
 	multiWriter := io.MultiWriter(os.Stdout, a.LogBuf)
 	cmd.Stdout = multiWriter
 	cmd.Stderr = multiWriter
-
-	cmd.Env = a.environment(domain)
+	cmd.Env = envList(appTypeContext.Env)
 
 	if err := cmd.Start(); err != nil {
 		a.mu.Lock()
@@ -148,6 +171,9 @@ func (a *App) EnsureStarted(ctx context.Context, domain string) error {
 	}()
 
 	err := a.waitReady(ctx)
+	if err == nil {
+		err = appTypeHandler.AfterStart(ctx, appTypeContext)
+	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -168,7 +194,14 @@ func (a *App) EnsureStarted(ctx context.Context, domain string) error {
 	return nil
 }
 
-func (a *App) environment(domain string) []string {
+func (a *App) markCrashed(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.State = StateCrashed
+	_, _ = a.LogBuf.Write([]byte(err.Error()))
+}
+
+func (a *App) newAppTypeContext() *types.TypeContext {
 	envMap := make(map[string]string)
 	for _, e := range os.Environ() {
 		kv := strings.SplitN(e, "=", 2)
@@ -179,12 +212,31 @@ func (a *App) environment(domain string) []string {
 	for k, v := range a.Config.Env {
 		envMap[k] = v
 	}
-	envMap["PORT"] = fmt.Sprintf("%d", a.Port)
-	envMap["APP_DOMAIN"] = domain
-	if strings.EqualFold(strings.TrimSpace(a.Config.AppType), "phx") {
-		envMap["PHX_HOST"] = domain
-	}
 
+	envMap["PORT"] = fmt.Sprintf("%d", a.Port)
+	domain := a.Domain()
+	envMap["APP_DOMAIN"] = domain
+
+	args := make([]string, 0, len(a.Config.Args))
+	for _, arg := range a.Config.Args {
+		args = append(args, os.Expand(arg, func(k string) string {
+			if k == "PORT" {
+				return fmt.Sprintf("%d", a.Port)
+			}
+			return os.Getenv(k)
+		}))
+	}
+	return &types.TypeContext{
+		Config:     a.Config,
+		Domain:     domain,
+		Port:       a.Port,
+		WorkingDir: a.Config.Cwd,
+		Args:       args,
+		Env:        envMap,
+	}
+}
+
+func envList(envMap map[string]string) []string {
 	var envList []string
 	for k, v := range envMap {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))

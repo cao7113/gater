@@ -15,23 +15,33 @@ import (
 var ErrAppExists = errors.New("应用已存在")
 
 type Manager struct {
-	mu       sync.RWMutex
-	apps     map[string]*app.App
-	store    *store.Store
-	nextPort int
-	ctx      context.Context
+	mu              sync.RWMutex
+	apps            map[string]*app.App
+	store           *store.Store
+	nextPort        int
+	ctx             context.Context
+	allowedSuffixes []config.AppSuffix
 }
 
-func New(ctx context.Context, st *store.Store) *Manager {
+func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *Manager {
+	allowedSuffixes := config.DefaultSuffixes
+	if len(suffixes) > 0 && len(suffixes[0]) > 0 {
+		allowedSuffixes = suffixes[0]
+	}
 	m := &Manager{
-		apps:     make(map[string]*app.App),
-		store:    st,
-		nextPort: 50001,
-		ctx:      ctx,
+		apps:            make(map[string]*app.App),
+		store:           st,
+		nextPort:        50001,
+		ctx:             ctx,
+		allowedSuffixes: allowedSuffixes,
 	}
 
 	// 从持久化存储恢复应用
 	for _, ac := range st.List() {
+		if ac.DomainSuffix == "" {
+			ac.DomainSuffix = allowedSuffixes[0].Suffix
+			_ = st.Save(ac)
+		}
 		m.registerInstance(ac)
 	}
 
@@ -51,6 +61,9 @@ func (m *Manager) RegisterApp(ac config.AppConfig) error {
 	defer m.mu.Unlock()
 
 	if err := config.Validate(ac); err != nil {
+		return fmt.Errorf("应用配置无效: %w", err)
+	}
+	if err := config.ValidateDomainSuffix(ac.DomainSuffix, m.allowedSuffixes); err != nil {
 		return fmt.Errorf("应用配置无效: %w", err)
 	}
 
@@ -76,6 +89,9 @@ func (m *Manager) UpdateApp(name string, cfg config.AppConfig) error {
 	}
 	cfg.Name = name
 	if err := config.Validate(cfg); err != nil {
+		return fmt.Errorf("应用配置无效: %w", err)
+	}
+	if err := config.ValidateDomainSuffix(cfg.DomainSuffix, m.allowedSuffixes); err != nil {
 		return fmt.Errorf("应用配置无效: %w", err)
 	}
 	m.apps[name].Stop()

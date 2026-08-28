@@ -21,6 +21,8 @@ type appManager interface {
 
 type AppInfo struct {
 	Name             string            `json:"name"`
+	DomainSuffix     string            `json:"domain_suffix"`
+	URL              string            `json:"url"`
 	AppType          string            `json:"app_type"`
 	Cwd              string            `json:"cwd"`
 	Cmd              string            `json:"cmd"`

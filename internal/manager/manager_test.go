@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cao7113/gater/internal/config"
 	"github.com/cao7113/gater/internal/store"
 )
 
@@ -13,6 +14,7 @@ func TestAddOrUpdateAppLoadsEnvFromAppConfig(t *testing.T) {
 	appDir := t.TempDir()
 	appYAML := `
 name: demo
+domain_suffix: .l.h
 cmd: echo
 args:
 - foo
@@ -58,7 +60,7 @@ idle_timeout: 5m
 func TestAddOrUpdateAppLoadsConfigFromPath(t *testing.T) {
 	appDir := t.TempDir()
 	appFile := filepath.Join(appDir, "app.yaml")
-	if err := os.WriteFile(appFile, []byte("name: requested\ncmd: printf\nargs: [requested]\n"), 0600); err != nil {
+	if err := os.WriteFile(appFile, []byte("name: requested\ndomain_suffix: .l.h\ncmd: printf\nargs: [requested]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	st, err := store.NewStore(filepath.Join(t.TempDir(), "store.yaml"))
@@ -84,7 +86,7 @@ func TestAddOrUpdateAppLoadsConfigFromPath(t *testing.T) {
 func TestAddOrUpdateAppRejectsDuplicateName(t *testing.T) {
 	appDir := t.TempDir()
 	appFile := filepath.Join(appDir, "app.yaml")
-	if err := os.WriteFile(appFile, []byte("name: demo\ncmd: echo\n"), 0600); err != nil {
+	if err := os.WriteFile(appFile, []byte("name: demo\ndomain_suffix: .l.h\ncmd: echo\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	st, err := store.NewStore(filepath.Join(t.TempDir(), "store.yaml"))
@@ -118,6 +120,18 @@ func TestAddOrUpdateAppRejectsInvalidAppConfig(t *testing.T) {
 	}
 	if _, ok := mgr.GetApp("demo"); ok {
 		t.Fatal("invalid app.yaml was registered")
+	}
+}
+
+func TestRegisterAppRejectsDisallowedSuffix(t *testing.T) {
+	st, err := store.NewStore(filepath.Join(t.TempDir(), "store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := New(context.Background(), st)
+	err = mgr.RegisterApp(config.AppConfig{Name: "demo", DomainSuffix: ".invalid", Cwd: "/tmp", Cmd: "echo", IdleTimeout: "5m"})
+	if err == nil {
+		t.Fatal("disallowed domain suffix was accepted")
 	}
 }
 

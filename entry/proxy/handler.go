@@ -36,8 +36,7 @@ func NewHandler(mgr *manager.Manager, suffixes []config.AppSuffix) http.Handler 
 			http.Error(w, fmt.Sprintf("Gater: 未注册的应用域名 [%s]", r.Host), http.StatusNotFound)
 			return
 		}
-		domain := hostName(r.Host)
-		if err := app.EnsureStarted(r.Context(), domain); err != nil {
+		if err := app.EnsureStarted(r.Context()); err != nil {
 			http.Error(w, fmt.Sprintf("Gater: 无法拉起服务 [%s]: %v", name, err), http.StatusBadGateway)
 			return
 		}
