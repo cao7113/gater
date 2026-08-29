@@ -13,7 +13,7 @@ func init() {
 type phoenixHandler struct{}
 
 func (phoenixHandler) Prepare(appTypeContext *TypeContext) error {
-	appTypeContext.Env["PHX_HOST"] = appTypeContext.Domain
+	// appTypeContext.Env["PHX_HOST"] = appTypeContext.Domain
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,6 +37,7 @@ type App struct {
 	LastActive    time.Time
 	Timeout       time.Duration
 	Cmd           *exec.Cmd
+	processDone   chan error
 	Proxy         *httputil.ReverseProxy
 	LogBuf        *LogBuffer
 	StartupMs     int64
@@ -63,188 +65,112 @@ func NewApp(ac config.AppConfig, port int) *App {
 	}
 }
 
-func (a *App) Domain() string {
-	name := strings.TrimSpace(a.Config.Name)
-	suffix := strings.TrimSpace(a.Config.DomainSuffix)
-	if name == "" || suffix == "" {
-		return ""
+func (a *App) EnsureRunning(ctx context.Context) error {
+	startTime, shouldWait := a.beginStart()
+	if shouldWait {
+		return a.waitForPort(ctx)
 	}
-	return name + suffix
-}
-
-func (a *App) URL(schemes ...string) string {
-	host := a.Domain()
-	if host == "" {
-		return ""
-	}
-	scheme := config.ParseAppSuffix(a.Config.DomainSuffix).Scheme
-	if len(schemes) > 0 && strings.TrimSpace(schemes[0]) != "" {
-		scheme = strings.TrimSpace(schemes[0])
-	}
-	return (&url.URL{Scheme: scheme, Host: host}).String()
-}
-
-func (a *App) EnsureStarted(ctx context.Context) error {
-	a.mu.Lock()
-	a.LastActive = time.Now()
-
-	if a.State == StateRunning {
-		a.mu.Unlock()
+	if startTime.IsZero() {
 		return nil
 	}
-	if a.State == StateStarting {
-		a.mu.Unlock()
-		return a.waitReady(ctx)
+
+	appTypeContext, appTypeHandler, err := a.prepareStart(ctx)
+	if err != nil {
+		return a.failStart(err)
 	}
 
-	a.State = StateStarting
-	startTime := time.Now()
-	a.mu.Unlock()
+	if err := a.startProcess(appTypeContext); err != nil {
+		return a.failStart(err)
+	}
+
+	if err := a.finalizeStart(ctx, appTypeHandler, appTypeContext, startTime); err != nil {
+		return a.failStart(err)
+	}
+	return nil
+}
+
+func (a *App) beginStart() (time.Time, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.LastActive = time.Now()
+	switch a.State {
+	case StateRunning:
+		return time.Time{}, false
+	case StateStarting:
+		return time.Time{}, true
+	default:
+		a.State = StateStarting
+		return time.Now(), false
+	}
+}
+
+func (a *App) prepareStart(ctx context.Context) (*types.TypeContext, types.Handler, error) {
+	if fi, err := os.Stat(a.Config.Cwd); err != nil || !fi.IsDir() {
+		return nil, nil, fmt.Errorf("应用工作目录不存在: %s", a.Config.Cwd)
+	}
+	if _, err := exec.LookPath(a.Config.Cmd); err != nil {
+		return nil, nil, fmt.Errorf("未找到启动命令 [%s]，请确认是否已安装或检查 PATH 环境变量", a.Config.Cmd)
+	}
 
 	appTypeContext := a.newAppTypeContext()
 	appTypeHandler := types.HandlerFor(a.Config.AppType)
 	if err := appTypeHandler.Prepare(appTypeContext); err != nil {
-		wrappedErr := fmt.Errorf("准备应用运行环境失败: %w", err)
-		a.markCrashed(wrappedErr)
-		return wrappedErr
+		return nil, nil, fmt.Errorf("准备应用运行环境失败: %w", err)
 	}
 	if err := appTypeHandler.BeforeStart(ctx, appTypeContext); err != nil {
-		wrappedErr := fmt.Errorf("应用启动前检查失败: %w", err)
-		a.markCrashed(wrappedErr)
-		return wrappedErr
+		return nil, nil, fmt.Errorf("应用启动前检查失败: %w", err)
 	}
+	return appTypeContext, appTypeHandler, nil
+}
 
-	// 1. 校验应用工作目录是否存在
-	if fi, err := os.Stat(a.Config.Cwd); err != nil || !fi.IsDir() {
-		a.mu.Lock()
-		a.State = StateCrashed
-		errMsg := fmt.Sprintf("应用工作目录不存在: %s", a.Config.Cwd)
-		_, _ = a.LogBuf.Write([]byte(errMsg))
-		a.mu.Unlock()
-		return fmt.Errorf("%s", errMsg)
-	}
-
-	// 2. 校验启动命令是否在系统 PATH 中或有效
-	if _, err := exec.LookPath(a.Config.Cmd); err != nil {
-		a.mu.Lock()
-		a.State = StateCrashed
-		errMsg := fmt.Sprintf("未找到启动命令 [%s]，请确认是否已安装或检查 PATH 环境变量", a.Config.Cmd)
-		_, _ = a.LogBuf.Write([]byte(errMsg))
-		a.mu.Unlock()
-		return fmt.Errorf("%s", errMsg)
-	}
-
-	finalArgs := appTypeContext.Args
-
-	cmd := exec.Command(a.Config.Cmd, finalArgs...)
-	cmd.Dir = a.Config.Cwd
-
-	// 创建独立进程组，防孤儿进程
+func (a *App) startProcess(appTypeContext *types.TypeContext) error {
+	cmd := exec.Command(a.Config.Cmd, appTypeContext.Args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	multiWriter := io.MultiWriter(os.Stdout, a.LogBuf)
-	cmd.Stdout = multiWriter
-	cmd.Stderr = multiWriter
+	cmd.Dir = a.Config.Cwd
 	cmd.Env = envList(appTypeContext.Env)
 
+	output := io.MultiWriter(os.Stdout, a.LogBuf)
+	cmd.Stdout = output
+	cmd.Stderr = output
+
 	if err := cmd.Start(); err != nil {
-		a.mu.Lock()
-		a.State = StateCrashed
-		_, _ = a.LogBuf.Write(fmt.Appendf(nil, "进程启动失败: %v", err))
-		a.mu.Unlock()
 		return fmt.Errorf("进程启动失败: %w", err)
 	}
 
+	processDone := make(chan error, 1)
 	a.mu.Lock()
 	a.Cmd = cmd
+	a.processDone = processDone
 	a.mu.Unlock()
-
-	// 监听进程非正常退出
-	go func() {
-		err := cmd.Wait()
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		if a.State == StateRunning {
-			log.Printf("[Gater] [%s] 进程意外退出: %v", a.Config.Name, err)
-			a.State = StateCrashed
-		}
-	}()
-
-	err := a.waitReady(ctx)
-	if err == nil {
-		err = appTypeHandler.AfterStart(ctx, appTypeContext)
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err != nil {
-		if a.Cmd != nil && a.Cmd.Process != nil {
-			_ = syscall.Kill(-a.Cmd.Process.Pid, syscall.SIGKILL)
-		}
-		a.State = StateCrashed
-		return err
-	}
-
-	a.State = StateRunning
-	a.StartupMs = time.Since(startTime).Milliseconds()
-	startedAt := time.Now()
-	a.LastStartedAt = &startedAt
-
-	log.Printf("[Gater] [%s] 应用就绪，耗时 %dms，运行于 127.0.0.1:%d", a.Config.Name, a.StartupMs, a.Port)
+	go a.waitProcess(cmd, processDone)
 	return nil
 }
 
-func (a *App) markCrashed(err error) {
+func (a *App) waitProcess(cmd *exec.Cmd, processDone chan<- error) {
+	err := cmd.Wait()
+	processDone <- err
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.State = StateCrashed
-	_, _ = a.LogBuf.Write([]byte(err.Error()))
-}
-
-func (a *App) newAppTypeContext() *types.TypeContext {
-	envMap := make(map[string]string)
-	for _, e := range os.Environ() {
-		kv := strings.SplitN(e, "=", 2)
-		if len(kv) == 2 {
-			envMap[kv[0]] = kv[1]
-		}
-	}
-	for k, v := range a.Config.Env {
-		envMap[k] = v
-	}
-
-	envMap["PORT"] = fmt.Sprintf("%d", a.Port)
-	domain := a.Domain()
-	envMap["APP_DOMAIN"] = domain
-
-	args := make([]string, 0, len(a.Config.Args))
-	for _, arg := range a.Config.Args {
-		args = append(args, os.Expand(arg, func(k string) string {
-			if k == "PORT" {
-				return fmt.Sprintf("%d", a.Port)
-			}
-			return os.Getenv(k)
-		}))
-	}
-	return &types.TypeContext{
-		Config:     a.Config,
-		Domain:     domain,
-		Port:       a.Port,
-		WorkingDir: a.Config.Cwd,
-		Args:       args,
-		Env:        envMap,
+	if a.Cmd == cmd && a.State == StateRunning {
+		log.Printf("[Gater] [%s] 进程意外退出: %v", a.Config.Name, err)
+		a.State = StateCrashed
 	}
 }
 
-func envList(envMap map[string]string) []string {
-	var envList []string
-	for k, v := range envMap {
-		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
+func (a *App) finalizeStart(ctx context.Context, handler types.Handler, appTypeContext *types.TypeContext, startTime time.Time) error {
+	if err := a.waitForPort(ctx); err != nil {
+		return err
 	}
-	return envList
+	if err := handler.AfterStart(ctx, appTypeContext); err != nil {
+		return fmt.Errorf("应用启动后处理失败: %w", err)
+	}
+	a.markRunning(startTime)
+	return nil
 }
 
-func (a *App) waitReady(ctx context.Context) error {
+func (a *App) waitForPort(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -266,36 +192,145 @@ func (a *App) waitReady(ctx context.Context) error {
 	}
 }
 
-func (a *App) Stop() {
+func (a *App) markRunning(startTime time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.State = StateRunning
+	a.StartupMs = time.Since(startTime).Milliseconds()
+	startedAt := time.Now()
+	a.LastStartedAt = &startedAt
+	log.Printf("[Gater] [%s] 应用就绪，耗时 %dms，运行于 127.0.0.1:%d", a.Config.Name, a.StartupMs, a.Port)
+}
 
-	if a.Cmd == nil || a.Cmd.Process == nil {
-		a.State = StateStopped
+func (a *App) failStart(err error) error {
+	a.stopProcess(syscall.SIGKILL)
+	a.markCrashed(err)
+	return err
+}
+
+func (a *App) stopProcess(signal syscall.Signal) {
+	a.mu.Lock()
+	cmd := a.Cmd
+	processDone := a.processDone
+	a.mu.Unlock()
+	if cmd == nil || cmd.Process == nil {
 		return
 	}
 
-	pid := a.Cmd.Process.Pid
-	log.Printf("[Gater] [%s] 正在终止进程组 (PGID: %d)...", a.Config.Name, pid)
-
-	// 向整个进程组发送 SIGINT 信号
-	_ = syscall.Kill(-pid, syscall.SIGINT)
-
-	done := make(chan struct{})
-	go func() {
-		_ = a.Cmd.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-time.After(3 * time.Second):
-		log.Printf("[Gater] [%s] 终止超时，强行杀死进程组", a.Config.Name)
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
-	case <-done:
+	_ = syscall.Kill(-cmd.Process.Pid, signal)
+	if processDone != nil {
+		select {
+		case <-processDone:
+		case <-time.After(3 * time.Second):
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
 	}
 
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.Cmd == cmd {
+		a.Cmd = nil
+		a.processDone = nil
+	}
+}
+
+func (a *App) markCrashed(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.State = StateCrashed
+	_, _ = a.LogBuf.Write([]byte(err.Error()))
+}
+
+func (a *App) newAppTypeContext() *types.TypeContext {
+	domain := a.Domain()
+
+	// 1. 仅用于占位符替换的上下文字典（不后追加，不混入系统变量）
+	ctxVars := map[string]string{
+		"DOMAIN_HOST": domain,
+		"PORT":        strconv.Itoa(a.Port),
+	}
+
+	// 2. 初始化 envMap 并读取系统环境变量
+	sysEnviron := os.Environ()
+	envMap := make(map[string]string, len(sysEnviron)+len(a.Config.Env)+len(ctxVars))
+	for _, e := range sysEnviron {
+		if kv := strings.SplitN(e, "=", 2); len(kv) == 2 {
+			envMap[kv[0]] = kv[1]
+		}
+	}
+
+	// 3. 写入固定基础变量
+	for k, v := range ctxVars {
+		envMap[k] = v
+	}
+
+	// 4. 使用 ctxVars 展开 Config.Env 并写入 envMap
+	for k, v := range a.Config.Env {
+		envMap[k] = ExpandPlaceholders(v, ctxVars)
+	}
+
+	// 5. 使用 ctxVars 展开 Config.Args
+	args := ExpandSlice(a.Config.Args, ctxVars)
+
+	return &types.TypeContext{
+		Config:     a.Config,
+		Domain:     domain,
+		Port:       a.Port,
+		WorkingDir: a.Config.Cwd,
+		Args:       args,
+		Env:        envMap,
+	}
+}
+
+// ExpandPlaceholders 使用给定的 vars 字典展开字符串中的 ${VAR} 或 $VAR 占位符。
+func ExpandPlaceholders(s string, vars map[string]string) string {
+	return os.Expand(s, func(k string) string {
+		return vars[k]
+	})
+}
+
+// ExpandSlice 批量展开切片中的占位符
+func ExpandSlice(slice []string, vars map[string]string) []string {
+	result := make([]string, len(slice))
+	for i, v := range slice {
+		result[i] = ExpandPlaceholders(v, vars)
+	}
+	return result
+}
+
+func envList(envMap map[string]string) []string {
+	var envList []string
+	for k, v := range envMap {
+		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
+	}
+	return envList
+}
+
+func (a *App) Touch() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.LastActive = time.Now()
+}
+
+func (a *App) Stop() {
+	a.mu.Lock()
+	cmd := a.Cmd
+	a.mu.Unlock()
+	if cmd == nil || cmd.Process == nil {
+		a.mu.Lock()
+		a.State = StateStopped
+		a.mu.Unlock()
+		return
+	}
+
+	pid := cmd.Process.Pid
+	log.Printf("[Gater] [%s] 正在终止进程组 (PGID: %d)...", a.Config.Name, pid)
+	a.stopProcess(syscall.SIGINT)
+
+	a.mu.Lock()
 	a.State = StateStopped
-	a.Cmd = nil
+	a.mu.Unlock()
 	log.Printf("[Gater] [%s] 进程组已彻底清理", a.Config.Name)
 }
 
@@ -319,9 +354,23 @@ func (a *App) MonitorIdle(ctx context.Context) {
 	}
 }
 
-func (a *App) Touch() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+func (a *App) Domain() string {
+	name := strings.TrimSpace(a.Config.Name)
+	suffix := strings.TrimSpace(a.Config.DomainSuffix)
+	if name == "" || suffix == "" {
+		return ""
+	}
+	return name + suffix
+}
 
-	a.LastActive = time.Now()
+func (a *App) URL(schemes ...string) string {
+	host := a.Domain()
+	if host == "" {
+		return ""
+	}
+	scheme := config.ParseAppSuffix(a.Config.DomainSuffix).Scheme
+	if len(schemes) > 0 && strings.TrimSpace(schemes[0]) != "" {
+		scheme = strings.TrimSpace(schemes[0])
+	}
+	return (&url.URL{Scheme: scheme, Host: host}).String()
 }

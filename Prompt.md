@@ -19,22 +19,30 @@
 
 ## todo
 
+- phx app templates add PHX_HOST
+- 查看运行时全部环境变量
 - copy app config from exited app with new name in register form
-- improve exec model
-  - pre-hook and env setup
-- livebook app
+- web page version text
+- fix gate client add bug
 - beautiful docs
+
 - gater run mode: dev or prod? with standalone store path
 - what relationship app-log and gater-log
 - apps registry
 - app target host config, now only 127.0.0.1
 
-## AppType specific extensions / hooks
+## DNS resolver
+
+todo
+
+- dnsmasq + caddy
+
+## AppType Handler
 
 - refactor app type Common interface to impl. PHX inject logic
 - app type match with app templ and keep simple!
 
-目前App的运行模型 基本都在 app.EnsureStarted
+目前App的运行模型 基本都在 app.EnsureRunning
 
 准备基于config.Config.AppType的值（目前可能为： phx，bun等）进行 应用运行机制扩展，插入某些应用配置逻辑
 如：
@@ -89,6 +97,6 @@ Web UI上分两种方式：
 - 目前的预制应用是通过前端app.js实现的，考虑是否可通过后端api和配置支持，更灵活和稳定
 
 CLI 部分
-- 主要通过选择 app.yaml方式创建
+- 主要通过选择 app.yaml 方式创建
 
 先评估和优化方案，确认后再执行
