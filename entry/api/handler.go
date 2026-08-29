@@ -218,7 +218,7 @@ func (h *handler) startApp(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	if err := application.EnsureRunning(ctx); err != nil {
+	if err := application.Run(ctx); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

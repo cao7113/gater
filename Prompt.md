@@ -37,6 +37,55 @@ todo
 
 - dnsmasq + caddy
 
+## App Run model
+
+- 本地使用，功能正确且安全优先，并发要求不高
+- 要求结构清晰简单，注释完整
+- 使用最新版的httputil.ReverseProxy
+
+```
+┌───────────────────────────────┐
+                  │    HTTP Request / EnsureRunning │
+                  └───────────────┬───────────────┘
+                                  │
+                       ┌──────────▼──────────┐
+                       │   a.mu.Lock()       │ ─── 临界区开始（线程排队）
+                       └──────────┬──────────┘
+                                  │
+                        / State == Running? \
+                       <                     > ── Yes ──> [ Unlock & Return nil ]
+                        \                     /
+                          ────────┬────────
+                                  │ No
+                                  │
+                       ┌──────────▼──────────┐
+                       │ a.State = Starting  │ ─── 标记状态为 Starting（供外部感知）
+                       └──────────┬──────────┘
+                                  │
+          ┌───────────────────────┴───────────────────────┐
+          │               startAppLocked()                │
+          │ 1. 检查 Cwd 与 Command 路径                     │
+          │ 2. Handler.Prepare & BeforeStart               │
+          │ 3. exec.Command & cmd.Start()                 │
+          │ 4. waitForPortOrExit() 监听端口与闪退          │
+          │ 5. Handler.AfterStart                          │
+          └───────────────────────┬───────────────────────┘
+                                  │
+                        /     启动是否成功?    \
+                       <                        >
+                        \─────────┬────────────/
+                       Success    │    Failed
+                          ┌───────┴───────┐
+                          │               │
+               ┌──────────▼──┐     ┌──────▼──────┐
+               │StateRunning │     │StateCrashed │
+               └──────────┬──┘     └──────┬──────┘
+                          │               │
+                       ┌──▼───────────────▼──┐
+                       │   a.mu.Unlock()     │ ─── 临界区结束
+                       └─────────────────────┘
+```
+
 ## AppType Handler
 
 - refactor app type Common interface to impl. PHX inject logic
@@ -100,3 +149,17 @@ CLI 部分
 - 主要通过选择 app.yaml 方式创建
 
 先评估和优化方案，确认后再执行
+
+## Golang
+
+常用参数说明
+-v：输出详细日志（会打印 t.Log 以及每个测试函数的 PASS/FAIL 状态）。
+
+-run <regexp>：使用正则表达式匹配要运行的测试函数名。
+
+-count=1：强制禁用测试缓存（如果你改了配置文件或环境变量，建议加上）。
+
+示例组合：
+
+Bash
+go test -v -count=1 -run TestEnsureRunning ./internal/app
