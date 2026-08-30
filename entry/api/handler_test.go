@@ -89,7 +89,7 @@ func TestGetConfig(t *testing.T) {
 	if info.Port != "8080" || info.AdminHost != "admin.lab" || info.StorePath != "~/.config/gater/store.yaml" || len(info.AppSuffixes) != 2 {
 		t.Fatalf("unexpected ServerConfig: %+v", info)
 	}
-	if len(info.AppTemplates) != 3 || info.AppTemplates[0].ID != config.AppTypePhoenix || info.AppTemplates[1].ID != "bun" || info.AppTemplates[2].ID != "python" {
+	if len(info.AppTemplates) != 3 || info.AppTemplates[0].ID != config.AppTypePhx || info.AppTemplates[1].ID != "bun" || info.AppTemplates[2].ID != "python" {
 		t.Fatalf("unexpected app templates: %+v", info.AppTemplates)
 	}
 }
@@ -116,7 +116,7 @@ func TestCreateAppFromConfig(t *testing.T) {
 	if !ok {
 		t.Fatal("application was not registered")
 	}
-	if application.Config.AppType != config.AppTypePhoenix || application.Config.Cmd != "mix" || application.Config.Cwd != "/tmp/phoenix-demo" {
+	if application.Config.AppType != config.AppTypePhx || application.Config.Cmd != "mix" || application.Config.Cwd != "/tmp/phoenix-demo" {
 		t.Fatalf("unexpected registered config: %+v", application.Config)
 	}
 	if application.Config.DomainSuffix != ".l.h" {

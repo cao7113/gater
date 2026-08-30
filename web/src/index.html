@@ -380,7 +380,6 @@
               <option value="">通用</option>
               <option value="phx">Phoenix</option>
               <option value="python">Python</option>
-              <option value="node">Node.js</option>
               <option value="bun">Bun</option>
             </select>
           </div>
@@ -396,7 +395,7 @@
           </div>
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
-              <label class="label text-xs font-semibold">启动参数（args）</label>
+              <label class="label text-xs font-semibold">启动参数（args）(可用变量：${PORT}, ${DOMAIN_HOST})</label>
               <span class="text-[10px] text-base-content/50 font-mono">支持 $PORT 变量</span>
             </div>
             <input type="text" x-model="form.argsInput" placeholder="-m http.server $PORT"
@@ -404,7 +403,7 @@
           </div>
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
-              <label class="label text-xs font-semibold">环境变量（env）</label>
+              <label class="label text-xs font-semibold">环境变量（env）(可用变量：${PORT}, ${DOMAIN_HOST})</label>
               <button type="button" @click="addRegisterEnvEntry()" class="btn btn-ghost btn-xs">+ 添加变量</button>
             </div>
             <div class="space-y-1">

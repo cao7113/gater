@@ -263,7 +263,7 @@ Alpine.data('dashboard', () => ({
     this.form.cmd = preset.cmd || '';
     this.form.argsInput = (preset.args || []).join(' ');
     this.form.idle_timeout = preset.idle_timeout || '5m';
-    this.registerEnvEntries = [];
+    this.registerEnvEntries = preset.env;
   },
 
   async submitApp() {

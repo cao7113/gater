@@ -7,7 +7,7 @@ import (
 )
 
 func init() {
-	Register(config.AppTypePhoenix, func() Handler { return phoenixHandler{} })
+	Register(config.AppTypePhx, func() Handler { return phoenixHandler{} })
 }
 
 type phoenixHandler struct{}

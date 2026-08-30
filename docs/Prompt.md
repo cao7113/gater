@@ -19,9 +19,8 @@
 
 ## todo
 
-- phx app templates add PHX_HOST
-- 查看运行时全部环境变量
 - copy app config from exited app with new name in register form
+- 查看运行时全部环境变量
 - web page version text
 - fix gate client add bug
 - beautiful docs
@@ -36,55 +35,6 @@
 todo
 
 - dnsmasq + caddy
-
-## App Run model
-
-- 本地使用，功能正确且安全优先，并发要求不高
-- 要求结构清晰简单，注释完整
-- 使用最新版的httputil.ReverseProxy
-
-```
-┌───────────────────────────────┐
-                  │    HTTP Request / EnsureRunning │
-                  └───────────────┬───────────────┘
-                                  │
-                       ┌──────────▼──────────┐
-                       │   a.mu.Lock()       │ ─── 临界区开始（线程排队）
-                       └──────────┬──────────┘
-                                  │
-                        / State == Running? \
-                       <                     > ── Yes ──> [ Unlock & Return nil ]
-                        \                     /
-                          ────────┬────────
-                                  │ No
-                                  │
-                       ┌──────────▼──────────┐
-                       │ a.State = Starting  │ ─── 标记状态为 Starting（供外部感知）
-                       └──────────┬──────────┘
-                                  │
-          ┌───────────────────────┴───────────────────────┐
-          │               startAppLocked()                │
-          │ 1. 检查 Cwd 与 Command 路径                     │
-          │ 2. Handler.Prepare & BeforeStart               │
-          │ 3. exec.Command & cmd.Start()                 │
-          │ 4. waitForPortOrExit() 监听端口与闪退          │
-          │ 5. Handler.AfterStart                          │
-          └───────────────────────┬───────────────────────┘
-                                  │
-                        /     启动是否成功?    \
-                       <                        >
-                        \─────────┬────────────/
-                       Success    │    Failed
-                          ┌───────┴───────┐
-                          │               │
-               ┌──────────▼──┐     ┌──────▼──────┐
-               │StateRunning │     │StateCrashed │
-               └──────────┬──┘     └──────┬──────┘
-                          │               │
-                       ┌──▼───────────────▼──┐
-                       │   a.mu.Unlock()     │ ─── 临界区结束
-                       └─────────────────────┘
-```
 
 ## AppType Handler
 

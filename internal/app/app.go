@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
@@ -20,6 +21,51 @@ import (
 	"github.com/cao7113/gater/internal/config"
 )
 
+// - 本地macOS应用代理工具，运行要求：绝对正确&安全，并发和性能要求不高
+// - 要求结构清晰简单，注释完整
+// ```
+// ┌───────────────────────────────┐
+//                   │    HTTP Request / Run │
+//                   └───────────────┬───────────────┘
+//                                   │
+//                        ┌──────────▼──────────┐
+//                        │   a.mu.Lock()       │ ─── 临界区开始（线程排队）
+//                        └──────────┬──────────┘
+//                                   │
+//                         / State == Running? \
+//                        <                     > ── Yes ──> [ Unlock & Return nil ]
+//                         \                     /
+//                           ────────┬────────
+//                                   │ No
+//                                   │
+//                        ┌──────────▼──────────┐
+//                        │ a.State = Starting  │ ─── 标记状态为 Starting（供外部感知）
+//                        └──────────┬──────────┘
+//                                   │
+//           ┌───────────────────────┴───────────────────────┐
+//           │               startAppLocked()                │
+//           │ 1. 检查 Cwd 与 Command 路径                     │
+//           │ 2. Handler.Prepare & BeforeStart               │
+//           │ 3. exec.Command & cmd.Start()                 │
+//           │ 4. waitForPortOrExit() 监听端口与闪退          │
+//           │ 5. Handler.AfterStart                          │
+//           └───────────────────────┬───────────────────────┘
+//                                   │
+//                         /     启动是否成功?    \
+//                        <                        >
+//                         \─────────┬────────────/
+//                        Success    │    Failed
+//                           ┌───────┴───────┐
+//                           │               │
+//                ┌──────────▼──┐     ┌──────▼──────┐
+//                │StateRunning │     │StateCrashed │
+//                └──────────┬──┘     └──────┬──────┘
+//                           │               │
+//                        ┌──▼───────────────▼──┐
+//                        │   a.mu.Unlock()     │ ─── 临界区结束
+//                        └─────────────────────┘
+// ```
+
 // State 表示应用当前所处的运行状态
 type State string
 
@@ -31,7 +77,7 @@ const (
 )
 
 type App struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	Config      config.AppConfig
 	Port        int
 	State       State
@@ -57,11 +103,29 @@ func NewApp(ac config.AppConfig, port int) *App {
 
 	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
 
-	// 使用 Go 1.18+ 推荐的 Rewrite 替代被废弃的 NewSingleHostReverseProxy
+	// 1. 生产级 Transport 配置（优化连接池与超时，避免连接泄露）
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   2 * time.Second, // 快速感知连接建立失败
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   5 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// 2. 使用 Rewrite 并配置优雅的 ErrorHandler（防止 502/断连导致进程崩溃）
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(targetURL)
+			// 透传真实请求 Header
+			r.Out.Header.Set("X-Forwarded-Host", r.In.Host)
 		},
+		Transport:    transport,
+		ErrorHandler: NewProxyErrorHandler(ac.Name), // 独立函数调用,
 	}
 
 	return &App{
@@ -71,7 +135,7 @@ func NewApp(ac config.AppConfig, port int) *App {
 		Timeout:    timeout,
 		LastActive: time.Now(),
 		Proxy:      proxy,
-		LogBuf:     NewLogBuffer(1000),
+		LogBuf:     NewLogBuffer(1000), // 复用本地 log.go 中的 NewLogBuffer
 	}
 }
 
@@ -91,6 +155,11 @@ func (a *App) Run(ctx context.Context) error {
 		return nil
 	}
 
+	// 1.1 如果当前处于启动中，提示返回，避免排队后重复触发启动
+	if a.State == StateStarting {
+		return fmt.Errorf("应用 [%s] 正在启动中，请稍后...", a.Config.Name)
+	}
+
 	// 2. 标记进入启动中状态，便于外部监控感知
 	a.State = StateStarting
 	startTime := time.Now()
@@ -98,7 +167,7 @@ func (a *App) Run(ctx context.Context) error {
 	// 3. 执行启动流程
 	if err := a.startAppLocked(ctx); err != nil {
 		a.State = StateCrashed
-		_, _ = a.LogBuf.Write([]byte(err.Error()))
+		_, _ = a.LogBuf.Write([]byte(err.Error() + "\n"))
 		a.cleanCmdLocked()
 		return err
 	}
@@ -135,9 +204,15 @@ func (a *App) startAppLocked(ctx context.Context) error {
 
 	// 3. 执行子进程创建
 	cmd := exec.Command(a.Config.Cmd, appTypeContext.Args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Setpgid: 进程组隔离
+	// Pdeathsig: 主进程意外退出时，系统自动发送 SIGKILL 终止子进程，杜绝孤儿进程
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+		// 存在跨平台问题 todo
+		// Pdeathsig: syscall.SIGKILL,
+	}
 	cmd.Dir = a.Config.Cwd
-	cmd.Env = envList(appTypeContext.Env)
+	cmd.Env = ToEnvList(appTypeContext.Env) // 复用本地 utils.go 中的 ToEnvList
 
 	output := io.MultiWriter(os.Stdout, a.LogBuf)
 	cmd.Stdout = output
@@ -152,7 +227,7 @@ func (a *App) startAppLocked(ctx context.Context) error {
 	a.processDone = processDone
 
 	// 启动后台 Goroutine 等待子进程退出
-	go a.waitProcess(cmd, processDone)
+	go a.waitTargetProcess(cmd, processDone)
 
 	// 4. 等待端口打开（同时监听进程是否闪退退出）
 	if err := a.waitForPortOrExit(ctx, processDone); err != nil {
@@ -179,7 +254,7 @@ func (a *App) Stop() {
 	}
 
 	log.Printf("[Gater] [%s] 正在停止应用...", a.Config.Name)
-	a.stopCmdLocked(syscall.SIGINT)
+	a.stopCmdLocked(syscall.SIGTERM) // 优先尝试 SIGTERM 优雅退出，超时后自动强杀
 	a.State = StateStopped
 	log.Printf("[Gater] [%s] 进程组已彻底清理", a.Config.Name)
 }
@@ -192,9 +267,9 @@ func (a *App) MonitorIdle(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			a.mu.Lock()
+			a.mu.RLock()
 			isIdle := a.State == StateRunning && time.Since(a.LastActive) > a.Timeout
-			a.mu.Unlock()
+			a.mu.RUnlock()
 
 			if isIdle {
 				a.Stop()
@@ -215,8 +290,9 @@ func (a *App) Touch() {
 
 // GetState 供外部在不持有大锁长时间等待的情况下获取实时状态
 func (a *App) GetState() State {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
 	return a.State
 }
 
@@ -224,10 +300,16 @@ func (a *App) GetState() State {
 // 2. 进程与底层辅助逻辑 (Process & Helper Routines)
 // ============================================================================
 
-// waitProcess 在后台等待子进程退出，处理意外崩溃
-func (a *App) waitProcess(cmd *exec.Cmd, processDone chan<- error) {
+// waitTargetProcess 在后台等待子进程退出，处理意外崩溃
+func (a *App) waitTargetProcess(cmd *exec.Cmd, processDone chan<- error) {
 	err := cmd.Wait()
-	processDone <- err
+
+	// 非阻塞发送：避免端口检查超时退出后导致的 Goroutine 永久死锁泄露
+	select {
+	case processDone <- err:
+	default:
+	}
+	// 在获取 a.mu 前关闭通道，唤醒等待 stopCmdLocked 的主线程，防止死锁
 	close(processDone)
 
 	a.mu.Lock()
@@ -240,7 +322,7 @@ func (a *App) waitProcess(cmd *exec.Cmd, processDone chan<- error) {
 	}
 }
 
-// waitForPortOrExit 轮询检查 TCP 端口，同时监视进程是否闪退
+// 轮询检查 TCP 端口，同时监视进程是否闪退
 func (a *App) waitForPortOrExit(ctx context.Context, processDone <-chan error) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -249,6 +331,8 @@ func (a *App) waitForPortOrExit(ctx context.Context, processDone <-chan error) e
 	defer cancel()
 
 	addr := fmt.Sprintf("127.0.0.1:%d", a.Port)
+	dialTimeout := 300 * time.Millisecond
+
 	for {
 		select {
 		case <-timeoutCtx.Done():
@@ -258,7 +342,7 @@ func (a *App) waitForPortOrExit(ctx context.Context, processDone <-chan error) e
 			return fmt.Errorf("应用进程在启动就绪前已闪退退出: %v", err)
 
 		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+			conn, err := net.DialTimeout("tcp", addr, dialTimeout)
 			if err == nil {
 				conn.Close()
 				return nil
@@ -277,15 +361,30 @@ func (a *App) stopCmdLocked(signal syscall.Signal) {
 		return
 	}
 
-	// 杀掉进程组
-	_ = syscall.Kill(-cmd.Process.Pid, signal)
+	if signal == 0 {
+		signal = syscall.SIGTERM
+	}
 
+	// 1. 获取进程组 ID (PGID) 并发送信号 kill 整个进程组
+	pgid, err := syscall.Getpgid(cmd.Process.Pid)
+	if err == nil {
+		_ = syscall.Kill(-pgid, signal)
+	} else {
+		_ = cmd.Process.Signal(signal)
+	}
+
+	// 2. 优雅退场机制：等待退出，5 秒超时后触发强制强杀 (SIGKILL)
 	if processDone != nil {
 		select {
 		case <-processDone:
-		case <-time.After(3 * time.Second):
-			// 超时未退出则强制杀进程
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			// 进程已顺利退出
+		case <-time.After(5 * time.Second):
+			log.Printf("[Gater] [%s] 进程响应信号超时，执行强制强杀 (SIGKILL)", a.Config.Name)
+			if pgid > 0 {
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+			} else {
+				_ = cmd.Process.Kill()
+			}
 		}
 	}
 }
@@ -319,51 +418,26 @@ func (a *App) newAppTypeContext() *types.TypeContext {
 	}
 
 	// 写入基础变量
-	for k, v := range ctxVars {
-		envMap[k] = v
-	}
+	// for k, v := range ctxVars {
+	// 	envMap[k] = v
+	// }
 
-	// 使用 ctxVars 展开 Config.Env 并写入 envMap
+	// 复用本地 utils.go 中的 ExpandPlaceholders 展开 Config.Env 并写入 envMap
 	for k, v := range a.Config.Env {
 		envMap[k] = ExpandPlaceholders(v, ctxVars)
 	}
 
-	// 展开 Config.Args
+	// 复用本地 utils.go 中的 ExpandSlice 展开 Config.Args
 	args := ExpandSlice(a.Config.Args, ctxVars)
 
 	return &types.TypeContext{
-		Config: a.Config,
-		// AppType:    a.Config.AppType, // 👈【修复点】显式补充 AppType 字段
+		Config:     a.Config,
 		Domain:     domain,
 		Port:       a.Port,
 		WorkingDir: a.Config.Cwd,
 		Args:       args,
 		Env:        envMap,
 	}
-}
-
-// ExpandPlaceholders 使用 vars 字典展开字符串中的 ${VAR} 或 $VAR 占位符
-func ExpandPlaceholders(s string, vars map[string]string) string {
-	return os.Expand(s, func(k string) string {
-		return vars[k]
-	})
-}
-
-// ExpandSlice 批量展开切片中的占位符
-func ExpandSlice(slice []string, vars map[string]string) []string {
-	result := make([]string, len(slice))
-	for i, v := range slice {
-		result[i] = ExpandPlaceholders(v, vars)
-	}
-	return result
-}
-
-func envList(envMap map[string]string) []string {
-	envList := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
-	}
-	return envList
 }
 
 func (a *App) Domain() string {

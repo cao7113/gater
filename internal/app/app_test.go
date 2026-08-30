@@ -31,7 +31,7 @@ func TestEnvironmentInjectsPortAndAppDomain(t *testing.T) {
 	if err := types.HandlerFor(application.Config.AppType).Prepare(appTypeContext); err != nil {
 		t.Fatal(err)
 	}
-	for _, item := range envList(appTypeContext.Env) {
+	for _, item := range ToEnvList(appTypeContext.Env) {
 		parts := strings.SplitN(item, "=", 2)
 		values[parts[0]] = parts[1]
 	}
@@ -60,7 +60,7 @@ func TestURLUsesAppDomain(t *testing.T) {
 	}
 }
 
-func TestEnsureRunningRejectsMissingWorkingDirectory(t *testing.T) {
+func TestRunRejectsMissingWorkingDirectory(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
 		DomainSuffix: ".l.h",
@@ -77,7 +77,7 @@ func TestEnsureRunningRejectsMissingWorkingDirectory(t *testing.T) {
 	}
 }
 
-func TestEnsureRunningRejectsMissingCommand(t *testing.T) {
+func TestRunRejectsMissingCommand(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
 		DomainSuffix: ".l.h",
@@ -94,7 +94,7 @@ func TestEnsureRunningRejectsMissingCommand(t *testing.T) {
 	}
 }
 
-func TestEnsureRunningRunsAndStopsApplication(t *testing.T) {
+func TestRunRunsAndStopsApplication(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is required for the process flow test")
 	}
@@ -118,7 +118,7 @@ func TestEnsureRunningRunsAndStopsApplication(t *testing.T) {
 	defer cancel()
 
 	if err := application.Run(ctx); err != nil {
-		t.Fatalf("EnsureRunning() error = %v", err)
+		t.Fatalf("Run() error = %v", err)
 	}
 	if application.GetState() != StateRunning {
 		t.Fatalf("state = %q, want %q", application.GetState(), StateRunning)
@@ -138,8 +138,8 @@ func TestEnsureRunningRunsAndStopsApplication(t *testing.T) {
 	}
 }
 
-// 补充测试：验证大锁机制下的并发 EnsureRunning 调用的安全性与正确性
-func TestConcurrentEnsureRunning(t *testing.T) {
+// 补充测试：验证大锁机制下的并发 Run 调用的安全性与正确性
+func TestConcurrentRun(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is required for the process flow test")
 	}
@@ -180,7 +180,7 @@ func TestConcurrentEnsureRunning(t *testing.T) {
 	close(errCh)
 
 	for err := range errCh {
-		t.Errorf("concurrent EnsureRunning error: %v", err)
+		t.Errorf("concurrent Run error: %v", err)
 	}
 
 	if application.GetState() != StateRunning {
