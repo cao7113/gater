@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // NewProxyErrorHandler 独立出来的代理异常处理器
@@ -52,4 +53,57 @@ func ToEnvList(envMap map[string]string) []string {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))
 	}
 	return envList
+}
+
+func cloneEnvMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+var defaultSensitiveEnvKeywords = []string{
+	"secret",
+	"token",
+	"password",
+	"passwd",
+	"cookie",
+	"auth",
+	"private",
+	"key",
+}
+
+func redactEnvValue(name, value string, sensitiveKeywords ...string) string {
+	if value == "" {
+		return value
+	}
+
+	keywords := defaultSensitiveEnvKeywords
+	if len(sensitiveKeywords) > 0 {
+		keywords = sensitiveKeywords
+	}
+
+	key := strings.ToLower(name)
+	for _, keyword := range keywords {
+		if strings.Contains(key, strings.ToLower(keyword)) {
+			return "***redacted***"
+		}
+	}
+
+	return value
+}
+
+func sanitizeEnvMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = redactEnvValue(k, v)
+	}
+	return out
 }

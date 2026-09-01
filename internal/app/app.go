@@ -43,6 +43,9 @@ type App struct {
 	Timeout     time.Duration
 	Cmd         *exec.Cmd
 	processDone chan error
+	Pid         int
+	RuntimeEnv  map[string]string
+	StartedAt   *time.Time
 
 	Proxy         *httputil.ReverseProxy
 	LogBuf        *LogBuffer
@@ -94,6 +97,7 @@ func NewApp(ac config.AppConfig, port int) *App {
 		LastActive: time.Now(),
 		Proxy:      proxy,
 		LogBuf:     NewLogBuffer(1000), // 复用本地 log.go 中的 NewLogBuffer
+		RuntimeEnv: make(map[string]string),
 	}
 }
 
@@ -135,6 +139,10 @@ func (a *App) Run(ctx context.Context) error {
 	a.StartupMs = time.Since(startTime).Milliseconds()
 	now := time.Now()
 	a.LastStartedAt = &now
+	a.StartedAt = &now
+	if a.Cmd != nil && a.Cmd.Process != nil {
+		a.Pid = a.Cmd.Process.Pid
+	}
 	log.Printf("[Gater] [%s] 应用就绪，耗时 %dms，运行于 127.0.0.1:%d", a.Config.Name, a.StartupMs, a.Port)
 
 	return nil
@@ -199,6 +207,10 @@ func (a *App) startAppLocked(ctx context.Context) error {
 		return fmt.Errorf("应用启动后处理失败: %w", err)
 	}
 
+	a.RuntimeEnv = cloneEnvMap(appTypeContext.Env)
+	if a.Cmd != nil && a.Cmd.Process != nil {
+		a.Pid = a.Cmd.Process.Pid
+	}
 	return nil
 }
 
@@ -418,4 +430,43 @@ func (a *App) URL(schemes ...string) string {
 		scheme = strings.TrimSpace(schemes[0])
 	}
 	return (&url.URL{Scheme: scheme, Host: host}).String()
+}
+
+func (a *App) Snapshot() map[string]any {
+	return a.snapshot(false)
+}
+
+func (a *App) SnapshotWithSensitive(showSensitive bool) map[string]any {
+	return a.snapshot(showSensitive)
+}
+
+func (a *App) snapshot(showSensitive bool) map[string]any {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	env := cloneEnvMap(a.RuntimeEnv)
+	if a.State != StateRunning {
+		env = cloneEnvMap(a.Config.Env)
+	}
+	if env == nil {
+		env = map[string]string{}
+	}
+	if !showSensitive {
+		env = sanitizeEnvMap(env)
+	}
+	payload := map[string]any{
+		"name":         a.Config.Name,
+		"state":        string(a.State),
+		"cwd":          a.Config.Cwd,
+		"cmd":          a.Config.Cmd,
+		"args":         append([]string(nil), a.Config.Args...),
+		"env":          env,
+		"port":         a.Port,
+		"pid":          a.Pid,
+		"startup_ms":   a.StartupMs,
+		"started_at":   a.StartedAt,
+		"last_started": a.LastStartedAt,
+		"idle_timeout": a.Timeout.String(),
+	}
+	return payload
 }

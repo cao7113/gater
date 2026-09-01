@@ -269,6 +269,38 @@ func TestGetApp(t *testing.T) {
 	}
 }
 
+func TestGetAppRuntime(t *testing.T) {
+	application := testApp("myapp")
+	application.Config.Env = map[string]string{"FOO": "bar", "PORT": "9000"}
+	application.Config.Cwd = "/tmp/myapp"
+	application.Config.Cmd = "echo"
+	application.Config.Args = []string{"hello"}
+	application.RuntimeEnv = map[string]string{"FOO": "bar", "PORT": "9000"}
+	application.Pid = 1234
+	startedAt := time.Date(2026, time.August, 27, 12, 34, 56, 0, time.UTC)
+	application.StartedAt = &startedAt
+
+	h := &handler{mgr: newFakeMgr(application)}
+	req := httptest.NewRequest(http.MethodGet, "/api/apps/myapp/runtime", nil)
+	req.SetPathValue("name", "myapp")
+	res := httptest.NewRecorder()
+
+	h.getAppRuntime(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", res.Code)
+	}
+	var got map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if got["name"] != "myapp" || got["pid"] != float64(1234) {
+		t.Fatalf("unexpected runtime snapshot: %#v", got)
+	}
+	if env, ok := got["env"].(map[string]any); !ok || env["FOO"] != "bar" {
+		t.Fatalf("unexpected env payload: %#v", got["env"])
+	}
+}
+
 func TestListAppsStartupInfo(t *testing.T) {
 	application := testApp("myapp")
 	startedAt := time.Date(2026, time.August, 27, 12, 34, 56, 0, time.UTC)

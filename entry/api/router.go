@@ -22,6 +22,7 @@ func NewHandler(mgr appManager) http.Handler {
 	mux.HandleFunc("GET /api/apps/{name}", h.getApp)
 	mux.HandleFunc("PUT /api/apps/{name}", h.updateApp)
 	mux.HandleFunc("GET /api/apps/{name}/config", h.getAppConfig)
+	mux.HandleFunc("GET /api/apps/{name}/runtime", h.getAppRuntime)
 	mux.HandleFunc("DELETE /api/apps/{name}", h.deleteApp)
 	mux.HandleFunc("POST /api/apps/{name}/stop", h.stopApp)
 	mux.HandleFunc("POST /api/apps/{name}/start", h.startApp)

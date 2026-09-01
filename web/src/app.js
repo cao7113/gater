@@ -14,8 +14,11 @@ Alpine.data('dashboard', () => ({
   configMode: 'edit',
   configLoading: false,
   configSaving: false,
+  runtimeLoading: false,
+  runtimeShowSensitive: false,
   configYaml: '',
   configShell: '',
+  runtimeData: null,
   editConfig: { name: '', app_type: '', cwd: '', cmd: '', args: [], idle_timeout: '', env: {} },
   envEntries: [],
   registerEnvEntries: [],
@@ -200,6 +203,58 @@ Alpine.data('dashboard', () => ({
   closeAppConfig() {
     document.getElementById('config_modal')?.close();
     this.configApp = null;
+  },
+
+  async openRuntime(app) {
+    this.runtimeData = null;
+    this.runtimeShowSensitive = false;
+    this.runtimeLoading = true;
+    const modal = document.getElementById('runtime_modal');
+    if (modal) modal.showModal();
+    try {
+      const res = await fetch(this.runtimeURL(app.name));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        this.showToast('读取运行配置失败: ' + (data.error || res.statusText), 'error');
+        return;
+      }
+      this.runtimeData = await res.json();
+    } catch (e) {
+      this.showToast('读取运行配置失败: ' + e.message, 'error');
+    } finally {
+      this.runtimeLoading = false;
+    }
+  },
+
+  runtimeURL(name) {
+    const query = this.runtimeShowSensitive ? '?show_sensitive=true' : '';
+    return `/api/apps/${encodeURIComponent(name)}/runtime${query}`;
+  },
+
+  async toggleRuntimeSensitive() {
+    if (!this.runtimeData || !this.runtimeData.name) return;
+    this.runtimeLoading = true;
+    try {
+      const res = await fetch(this.runtimeURL(this.runtimeData.name));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        this.showToast('读取运行配置失败: ' + (data.error || res.statusText), 'error');
+        this.runtimeShowSensitive = !this.runtimeShowSensitive;
+        return;
+      }
+      this.runtimeData = await res.json();
+    } catch (e) {
+      this.runtimeShowSensitive = !this.runtimeShowSensitive;
+      this.showToast('读取运行配置失败: ' + e.message, 'error');
+    } finally {
+      this.runtimeLoading = false;
+    }
+  },
+
+  closeRuntime() {
+    const modal = document.getElementById('runtime_modal');
+    if (modal) modal.close();
+    this.runtimeData = null;
   },
 
   openAddModal() {

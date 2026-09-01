@@ -19,7 +19,8 @@
 
 ## todo
 
-- 查看运行时全部环境变量
+- port 应该只在 运行时分配，避免大量port占有，还有其它资源占有情况分析
+
 - web page version text
 - app target host config, now only 127.0.0.1
 

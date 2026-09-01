@@ -71,6 +71,8 @@ func run(c *client, command string, args []string) error {
 		return c.config()
 	case "show", "view":
 		return c.show(oneAppArg(command, args))
+	case "runtime", "env":
+		return c.runtime(args)
 	case "log":
 		return c.logs(oneAppArg(command, args))
 	case "start":
@@ -128,6 +130,24 @@ func (c *client) logs(name string) error {
 	}
 	_, err := fmt.Print(response.Logs)
 	return err
+}
+
+func (c *client) runtime(args []string) error {
+	flags := pflag.NewFlagSet("runtime", pflag.ContinueOnError)
+	showSensitive := flags.Bool("show-sensitive", false, "显示未脱敏的环境变量")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	name := oneAppArg("runtime", flags.Args())
+	path := "/api/apps/" + url.PathEscape(name) + "/runtime"
+	if *showSensitive {
+		path += "?show_sensitive=true"
+	}
+	var runtime map[string]any
+	if err := c.get(path, &runtime); err != nil {
+		return err
+	}
+	return printJSON(runtime)
 }
 
 func (c *client) action(action, name string) error {
@@ -277,6 +297,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  list              列出所有应用")
 	fmt.Fprintln(os.Stderr, "  config            显示 store 配置")
 	fmt.Fprintln(os.Stderr, "  show <app>        查看应用配置与状态")
+	fmt.Fprintln(os.Stderr, "  runtime <app>     查看运行配置（默认脱敏；--show-sensitive 显示敏感值）")
 	fmt.Fprintln(os.Stderr, "  logs <app>        查看应用日志")
 	fmt.Fprintln(os.Stderr, "  start <app>       启动应用")
 	fmt.Fprintln(os.Stderr, "  stop <app>        停止应用")

@@ -54,6 +54,46 @@ func TestURLUsesAppDomain(t *testing.T) {
 	}
 }
 
+func TestSnapshotRedactsSensitiveEnvByDefault(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name: "demo",
+		Env: map[string]string{
+			"APP_MODE":  "dev",
+			"API_TOKEN": "secret-value",
+		},
+	}, 50001)
+	application.State = StateRunning
+	application.RuntimeEnv = map[string]string{
+		"APP_MODE":  "dev",
+		"API_TOKEN": "secret-value",
+	}
+
+	redacted := application.Snapshot()
+	redactedEnv := redacted["env"].(map[string]string)
+	if redactedEnv["APP_MODE"] != "dev" || redactedEnv["API_TOKEN"] != "***redacted***" {
+		t.Fatalf("unexpected redacted environment: %#v", redactedEnv)
+	}
+
+	visible := application.SnapshotWithSensitive(true)
+	visibleEnv := visible["env"].(map[string]string)
+	if visibleEnv["API_TOKEN"] != "secret-value" {
+		t.Fatalf("sensitive environment value was not restored: %#v", visibleEnv)
+	}
+}
+
+func TestSnapshotUsesConfiguredEnvWhenNotRunning(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name: "demo",
+		Env:  map[string]string{"APP_MODE": "dev"},
+	}, 50001)
+
+	snapshot := application.Snapshot()
+	env := snapshot["env"].(map[string]string)
+	if env["APP_MODE"] != "dev" {
+		t.Fatalf("configured environment was not used: %#v", env)
+	}
+}
+
 func TestRunRejectsMissingWorkingDirectory(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",

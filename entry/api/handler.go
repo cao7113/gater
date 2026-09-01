@@ -171,6 +171,17 @@ func (h *handler) getAppConfig(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *handler) getAppRuntime(w http.ResponseWriter, r *http.Request) {
+	name := pathName(r)
+	application, exists := h.mgr.GetApp(name)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("应用 [%s] 不存在", name))
+		return
+	}
+	showSensitive := r.URL.Query().Get("show_sensitive") == "true"
+	writeJSON(w, http.StatusOK, application.SnapshotWithSensitive(showSensitive))
+}
+
 func shellCommand(cfg config.AppConfig, port int) string {
 	args := make([]string, 0, len(cfg.Args))
 	for _, arg := range cfg.Args {
