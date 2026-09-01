@@ -23,48 +23,6 @@ import (
 
 // - 本地macOS应用代理工具，运行要求：绝对正确&安全，并发和性能要求不高
 // - 要求结构清晰简单，注释完整
-// ```
-// ┌───────────────────────────────┐
-//                   │    HTTP Request / Run │
-//                   └───────────────┬───────────────┘
-//                                   │
-//                        ┌──────────▼──────────┐
-//                        │   a.mu.Lock()       │ ─── 临界区开始（线程排队）
-//                        └──────────┬──────────┘
-//                                   │
-//                         / State == Running? \
-//                        <                     > ── Yes ──> [ Unlock & Return nil ]
-//                         \                     /
-//                           ────────┬────────
-//                                   │ No
-//                                   │
-//                        ┌──────────▼──────────┐
-//                        │ a.State = Starting  │ ─── 标记状态为 Starting（供外部感知）
-//                        └──────────┬──────────┘
-//                                   │
-//           ┌───────────────────────┴───────────────────────┐
-//           │               startAppLocked()                │
-//           │ 1. 检查 Cwd 与 Command 路径                     │
-//           │ 2. Handler.Prepare & BeforeStart               │
-//           │ 3. exec.Command & cmd.Start()                 │
-//           │ 4. waitForPortOrExit() 监听端口与闪退          │
-//           │ 5. Handler.AfterStart                          │
-//           └───────────────────────┬───────────────────────┘
-//                                   │
-//                         /     启动是否成功?    \
-//                        <                        >
-//                         \─────────┬────────────/
-//                        Success    │    Failed
-//                           ┌───────┴───────┐
-//                           │               │
-//                ┌──────────▼──┐     ┌──────▼──────┐
-//                │StateRunning │     │StateCrashed │
-//                └──────────┬──┘     └──────┬──────┘
-//                           │               │
-//                        ┌──▼───────────────▼──┐
-//                        │   a.mu.Unlock()     │ ─── 临界区结束
-//                        └─────────────────────┘
-// ```
 
 // State 表示应用当前所处的运行状态
 type State string
@@ -404,8 +362,9 @@ func (a *App) newAppTypeContext() *types.TypeContext {
 
 	// 仅用于占位符替换的基础变量
 	ctxVars := map[string]string{
-		"DOMAIN_HOST": domain,
-		"PORT":        strconv.Itoa(a.Port),
+		"APP_NAME":   a.Config.Name,
+		"APP_DOMAIN": domain,
+		"PORT":       strconv.Itoa(a.Port),
 	}
 
 	// 读取系统环境变量

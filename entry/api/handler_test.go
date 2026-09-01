@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -141,6 +143,58 @@ func TestCreateAppFromConfigRequiresCwd(t *testing.T) {
 	(&handler{mgr: newFakeMgr()}).createAppFromConfig(res, req)
 	if res.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", res.Code)
+	}
+}
+
+func TestFromYAMLRejectsRelativePath(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/from-yaml", strings.NewReader(`{"path":"relative/app.yaml"}`))
+	res := httptest.NewRecorder()
+	(&handler{mgr: newFakeMgr()}).fromYAML(res, req)
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", res.Code)
+	}
+}
+
+func TestLoadFromUsesExplicitCwdInAppYAML(t *testing.T) {
+	appDir := t.TempDir()
+	appPath := filepath.Join(appDir, "app.yaml")
+	content := `name: demo
+domain_suffix: .l.h
+app_type: phx
+cwd: /tmp/custom-workdir
+cmd: mix
+idle_timeout: 10m
+`
+	if err := os.WriteFile(appPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFrom(appPath)
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
+	}
+	if cfg.Cwd != "/tmp/custom-workdir" {
+		t.Fatalf("want explicit cwd from app.yaml, got %q", cfg.Cwd)
+	}
+}
+
+func TestLoadFromFallsBackToAppYAMLDirectory(t *testing.T) {
+	appDir := t.TempDir()
+	appPath := filepath.Join(appDir, "app.yaml")
+	content := `name: demo
+domain_suffix: .l.h
+app_type: phx
+cmd: mix
+idle_timeout: 10m
+`
+	if err := os.WriteFile(appPath, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFrom(appPath)
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
+	}
+	if cfg.Cwd != appDir {
+		t.Fatalf("want app.yaml directory as cwd, got %q", cfg.Cwd)
 	}
 }
 

@@ -5,12 +5,20 @@ import "net/http"
 func NewHandler(mgr appManager) http.Handler {
 	h := &handler{mgr: mgr}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/fs/pick-folder", h.pickFolder)
+
+	// File selection and YAML import.
+	mux.HandleFunc("POST /api/fs/pick-yaml-file", h.pickYAMLFile)
+	mux.HandleFunc("POST /api/apps/from-yaml", h.fromYAML)
+
+	// Server and store configuration.
 	mux.HandleFunc("GET /api/config", h.getConfig)
 	mux.HandleFunc("GET /api/store/config", h.getStoreConfig)
+
+	// App collection operations.
 	mux.HandleFunc("GET /api/apps", h.listApps)
-	mux.HandleFunc("POST /api/apps/from-yaml-file", h.createAppFromYAMLFile)
 	mux.HandleFunc("POST /api/apps/from-config", h.createAppFromConfig)
+
+	// Single app operations.
 	mux.HandleFunc("GET /api/apps/{name}", h.getApp)
 	mux.HandleFunc("PUT /api/apps/{name}", h.updateApp)
 	mux.HandleFunc("GET /api/apps/{name}/config", h.getAppConfig)

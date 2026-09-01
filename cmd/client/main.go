@@ -78,7 +78,7 @@ func run(c *client, command string, args []string) error {
 	case "stop":
 		return c.action("stop", oneAppArg(command, args))
 	case "add":
-		return c.add(oneAppArg(command, args))
+		return c.addYAML(oneAppArg(command, args))
 	case "remove", "rm":
 		return c.remove(oneAppArg(command, args))
 	default:
@@ -134,14 +134,28 @@ func (c *client) action(action, name string) error {
 	return c.post("/api/apps/"+url.PathEscape(name)+"/"+action, nil)
 }
 
-func (c *client) add(path string) error {
-	path = filepath.Join(path, "app.yaml")
+func (c *client) addYAML(path string) error {
+	if path == "" {
+		return errors.New("path is required")
+	}
+	if !filepath.IsAbs(path) {
+		if _, err := os.Stat(path); err == nil {
+			absPath, err := filepath.Abs(path)
+			if err != nil {
+				return fmt.Errorf("resolve absolute path failed: %w", err)
+			}
+			path = absPath
+		}
+	}
+	if !filepath.IsAbs(path) {
+		return errors.New("path must be an absolute path to app.yaml")
+	}
 
 	body, err := json.Marshal(map[string]string{"path": path})
 	if err != nil {
 		return err
 	}
-	if err := c.postJSON("/api/apps/from-yaml-file", bytes.NewReader(body)); err != nil {
+	if err := c.postJSON("/api/apps/from-yaml", bytes.NewReader(body)); err != nil {
 		return err
 	}
 	fmt.Printf("已添加应用 %q\n", path)
@@ -266,7 +280,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  logs <app>        查看应用日志")
 	fmt.Fprintln(os.Stderr, "  start <app>       启动应用")
 	fmt.Fprintln(os.Stderr, "  stop <app>        停止应用")
-	fmt.Fprintln(os.Stderr, "  add <path>        通过路径添加应用")
+	fmt.Fprintln(os.Stderr, "  add <path-with-app.yaml>        通过路径添加应用")
 	fmt.Fprintln(os.Stderr, "  remove <name>     删除应用 (别名: rm)")
 	fmt.Fprintln(os.Stderr, "\n默认地址: "+defaultServerURL)
 }

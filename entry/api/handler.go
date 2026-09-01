@@ -21,16 +21,21 @@ import (
 
 type handler struct{ mgr appManager }
 
-func (h *handler) pickFolder(w http.ResponseWriter, _ *http.Request) {
-	output, err := exec.Command("osascript", "-e", `POSIX path of (choose folder with prompt "请选择应用项目所在目录")`).Output()
+func (h *handler) pickYAMLFile(w http.ResponseWriter, _ *http.Request) {
+	output, err := exec.Command("osascript", "-e", `POSIX path of (choose file with prompt "请选择 app.yaml 文件" of type {"public.yaml"})`).Output()
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"canceled": true})
 		return
 	}
 
-	path := strings.TrimRight(strings.TrimSpace(string(output)), "/")
+	path := strings.TrimSpace(string(output))
+	if path == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"canceled": true})
+		return
+	}
+	path = strings.TrimRight(path, "/")
 	response := map[string]any{"path": path, "canceled": false}
-	if cfg, err := config.LoadFrom(filepath.Join(path, "app.yaml")); err == nil {
+	if cfg, err := config.LoadFrom(path); err == nil {
 		response["config"] = cfg
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -61,7 +66,7 @@ func (h *handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, h.mgr.ServerConfig())
 }
 
-func (h *handler) createAppFromYAMLFile(w http.ResponseWriter, r *http.Request) {
+func (h *handler) fromYAML(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Path string `json:"path"`
 	}
@@ -70,11 +75,16 @@ func (h *handler) createAppFromYAMLFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if strings.TrimSpace(request.Path) == "" {
+	path := strings.TrimSpace(request.Path)
+	if path == "" {
 		writeError(w, http.StatusBadRequest, "path is required")
 		return
 	}
-	if err := h.mgr.AddOrUpdateApp(request.Path); err != nil {
+	if !isYAMLPathAllowed(path) {
+		writeError(w, http.StatusBadRequest, "path must be an absolute path to app.yaml")
+		return
+	}
+	if err := h.mgr.AddOrUpdateApp(path); err != nil {
 		if errors.Is(err, manager.ErrAppExists) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
@@ -83,6 +93,10 @@ func (h *handler) createAppFromYAMLFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+func isYAMLPathAllowed(path string) bool {
+	return path != "" && filepath.IsAbs(path)
 }
 
 func (h *handler) createAppFromConfig(w http.ResponseWriter, r *http.Request) {

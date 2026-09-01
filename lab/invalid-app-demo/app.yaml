@@ -1,0 +1,8 @@
+name: demo2
+# domain_suffix: .l.h
+# cwd: "auto-fill"
+cmd: "sh"
+env:
+  LOG_LEVEL: debug
+  FOO: bar
+idle_timeout: "10m"

@@ -19,16 +19,14 @@
 
 ## todo
 
-- copy app config from exited app with new name in register form
 - 查看运行时全部环境变量
 - web page version text
-- fix gate client add bug
-- beautiful docs
+- app target host config, now only 127.0.0.1
 
+- beautiful docs
 - gater run mode: dev or prod? with standalone store path
 - what relationship app-log and gater-log
 - apps registry
-- app target host config, now only 127.0.0.1
 
 ## DNS resolver
 

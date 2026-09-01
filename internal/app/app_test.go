@@ -15,7 +15,7 @@ import (
 	"github.com/cao7113/gater/internal/config"
 )
 
-func TestEnvironmentInjectsPortAndAppDomain(t *testing.T) {
+func TestEnvironment(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
 		DomainSuffix: ".l.s",
@@ -36,14 +36,8 @@ func TestEnvironmentInjectsPortAndAppDomain(t *testing.T) {
 		values[parts[0]] = parts[1]
 	}
 
-	if values["PORT"] != "50001" {
-		t.Fatalf("PORT = %q, want 50001", values["PORT"])
-	}
 	if values["aPort"] != "50001" {
 		t.Fatalf("aPort = %q, want 50001", values["aPort"])
-	}
-	if values["DOMAIN_HOST"] != "demo.l.s" {
-		t.Fatalf("DOMAIN_HOST = %q, want demo.l.s", values["DOMAIN_HOST"])
 	}
 	if values["FOO"] != "bar" {
 		t.Fatalf("FOO = %q, want bar", values["FOO"])

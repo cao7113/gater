@@ -54,7 +54,9 @@ func LoadFrom(yamlPath string) (*AppConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("解析应用目录失败: %w", err)
 	}
-	cfg.Cwd = appDir
+	if strings.TrimSpace(cfg.Cwd) == "" {
+		cfg.Cwd = appDir
+	}
 
 	if cfg.IdleTimeout == "" {
 		cfg.IdleTimeout = DefaultIdleTimeout
@@ -115,7 +117,7 @@ func ValidateDomainSuffix(suffix string, allowed []AppSuffix) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("domain_suffix 不被允许: %q", suffix)
+	return fmt.Errorf("domain_suffix 不被允许: %q, allowed suffixes: %v", suffix, allowed)
 }
 
 func ParseTimeout(du string) (time.Duration, error) {

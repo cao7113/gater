@@ -76,7 +76,7 @@ func (m *Manager) RegisterApp(ac config.AppConfig) error {
 	}
 
 	m.registerInstance(ac)
-	log.Printf("[Gater] 成功注册应用: %s -> %s", ac.Name, ac.Cwd)
+	log.Printf("[Gater] 注册应用成功: %s -> %s", ac.Name, ac.Cwd)
 	return nil
 }
 

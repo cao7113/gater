@@ -221,21 +221,31 @@ Alpine.data('dashboard', () => ({
     }
   },
 
+  async pickYAMLFile() {
+    const pickRes = await fetch('/api/fs/pick-yaml-file', { method: 'POST' });
+    const picked = await pickRes.json();
+    if (picked.canceled) return null;
+    if (!pickRes.ok || !picked.config || !picked.path) {
+      this.showToast('所选文件不是有效的 app.yaml', 'error');
+      return null;
+    }
+    return picked;
+  },
+
+  async addYAML(path) {
+    return fetch('/api/apps/from-yaml', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path })
+    });
+  },
+
   async registerFromYAML() {
     try {
-      const pickRes = await fetch('/api/fs/pick-folder', { method: 'POST' });
-      const picked = await pickRes.json();
-      if (picked.canceled) return;
-      if (!pickRes.ok || !picked.config) {
-        this.showToast('所选目录没有有效的 app.yaml', 'error');
-        return;
-      }
+      const picked = await this.pickYAMLFile();
+      if (!picked) return;
 
-      const res = await fetch('/api/apps/from-yaml-file', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: `${picked.path.replace(/\/+$/, '')}/app.yaml` })
-      });
+      const res = await this.addYAML(picked.path);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
