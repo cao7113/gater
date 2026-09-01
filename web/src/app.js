@@ -24,6 +24,7 @@ Alpine.data('dashboard', () => ({
   registerEnvEntries: [],
   appSuffixes: [],
   app_templates: [],
+  serverVersion: 'dev',
   form: {
     name: '',
     domain_suffix: '',
@@ -46,6 +47,7 @@ Alpine.data('dashboard', () => ({
       const res = await fetch('/api/config');
       if (res.ok) {
         const data = await res.json();
+        this.serverVersion = data.version || 'dev';
         const suffixes = (data.app_suffixes || []).map(item => {
           if (typeof item === 'string') {
             return { suffix: item, scheme: 'http' };

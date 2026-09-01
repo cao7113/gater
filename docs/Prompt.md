@@ -19,12 +19,11 @@
 
 ## todo
 
-- web page version text
-- app target host config, now only 127.0.0.1
+- registration args should be args same with edit form
+
+- what relationship app-log and gater-log, manual refresh interval
 - beautiful docs
-- gater run mode: dev or prod? with standalone store path
-- what relationship app-log and gater-log
-- apps registry
+- app config registry
 
 ## DNS resolver
 

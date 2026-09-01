@@ -4,8 +4,8 @@ import "fmt"
 
 var (
 	Version = "dev"
-	Commit  = "unknown"
-	Date    = "unknown"
+	Commit  = "-"
+	Date    = "-"
 )
 
 func String() string {

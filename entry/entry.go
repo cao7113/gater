@@ -1,6 +1,7 @@
 package entry
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -9,31 +10,36 @@ import (
 	"github.com/cao7113/gater/entry/proxy"
 	"github.com/cao7113/gater/internal/config"
 	"github.com/cao7113/gater/internal/manager"
+	"github.com/cao7113/gater/internal/version"
 	"github.com/cao7113/gater/web"
 )
 
 type Config struct {
-	Port        string
-	AdminHost   string
+	AdminPort   string
 	StorePath   string
+	TargetHost  string
 	AppSuffixes []config.AppSuffix
 }
 
 func New(cfg Config, mgr *manager.Manager) *http.Server {
+	if strings.TrimSpace(cfg.TargetHost) != "" {
+		config.TargetHost = strings.TrimSpace(cfg.TargetHost)
+	}
 	adminHandler := http.NewServeMux()
 
 	suffixes := cfg.AppSuffixes
 	if len(suffixes) == 0 {
 		suffixes = config.DefaultSuffixes
 	}
+	config.AppSuffixes = append([]config.AppSuffix(nil), suffixes...)
 
 	apiHandler := api.NewHandler(&serverCtx{Manager: mgr, cfg: cfg, appSuffixes: suffixes})
 	adminHandler.Handle("/api/", apiHandler)
 	adminHandler.Handle("/", http.FileServer(web.GetFileSystem()))
 
 	return &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: route(cfg.AdminHost, adminHandler, proxy.NewHandler(mgr, suffixes)),
+		Addr:    ":" + cfg.AdminPort,
+		Handler: route(adminHandler, proxy.NewHandler(mgr, suffixes)),
 	}
 }
 
@@ -49,22 +55,33 @@ func (s *serverCtx) AppSuffixes() []config.AppSuffix { return s.appSuffixes }
 
 func (s *serverCtx) ServerConfig() api.ServerConfig {
 	return api.ServerConfig{
-		Port:         s.cfg.Port,
-		AdminHost:    s.cfg.AdminHost,
+		Version:      version.String(),
+		AdminPort:    s.cfg.AdminPort,
+		AdminHost:    config.AdminHosts[0],
+		TargetHost:   config.TargetHost,
 		StorePath:    s.cfg.StorePath,
 		AppSuffixes:  s.appSuffixes,
 		AppTemplates: config.DefaultAppTemplates,
 	}
 }
 
-func route(adminHost string, admin, remote http.Handler) http.Handler {
+func route(admin, remote http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := hostName(r.Host)
-		if host == adminHost || host == "localhost" || host == "127.0.0.1" {
+
+		if config.IsAdminHost(host) {
 			admin.ServeHTTP(w, r)
 			return
 		}
-		remote.ServeHTTP(w, r)
+
+		if config.IsTargetHost(host) {
+			remote.ServeHTTP(w, r)
+			return
+		}
+
+		// 未匹配到管理域名或目标应用域名的流量直接忽略。
+		log.Printf("[Gater] 忽略未匹配域名请求: host=%s method=%s path=%s", host, r.Method, r.URL.Path)
+		http.NotFound(w, r)
 	})
 }
 

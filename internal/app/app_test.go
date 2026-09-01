@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -134,12 +133,10 @@ func TestRunRunsAndStopsApplication(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is required for the process flow test")
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	port, err := NextPort()
 	if err != nil {
 		t.Fatal(err)
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	_ = listener.Close()
 
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
@@ -180,12 +177,10 @@ func TestConcurrentRun(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is required for the process flow test")
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	port, err := NextPort()
 	if err != nil {
 		t.Fatal(err)
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	_ = listener.Close()
 
 	application := NewApp(config.AppConfig{
 		Name:         "demo",

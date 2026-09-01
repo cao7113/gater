@@ -14,6 +14,19 @@ var DefaultSuffixes = []AppSuffix{
 	{Suffix: ".l.s", Scheme: "https"},
 }
 
+// AppSuffixes 是当前进程接受的应用域名后缀列表。
+var AppSuffixes = append([]AppSuffix(nil), DefaultSuffixes...)
+
+// IsTargetHost 判断 Host 是否匹配允许的应用域名后缀。
+func IsTargetHost(host string) bool {
+	for _, suffix := range AppSuffixes {
+		if strings.HasSuffix(host, suffix.Suffix) && len(host) > len(suffix.Suffix) {
+			return true
+		}
+	}
+	return false
+}
+
 // ParseAppSuffix 从字符串解析 AppSuffix（支持 "https:.l.s", ".l.s:https", ".l.s" 等格式）。
 func ParseAppSuffix(raw string) AppSuffix {
 	raw = strings.TrimSpace(raw)

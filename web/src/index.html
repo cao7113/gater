@@ -16,7 +16,7 @@
       <span class="text-xl font-black tracking-wider text-primary flex items-center gap-1.5">
         <span>🐊</span> GATER
       </span>
-      <span class="badge badge-neutral text-xs font-mono">v2.0.0</span>
+      <span class="badge badge-neutral text-xs font-mono" x-text="serverVersion"></span>
       <span class="text-xs text-base-content/50 hidden sm:inline-block">按需拉起 &amp; 本地泛域名托管引擎</span>
     </div>
     <div class="flex-none gap-2">
@@ -297,11 +297,6 @@
               </template>
             </div>
           </div>
-          <div class="form-control gap-1">
-            <label class="label py-1 text-xs font-semibold">端口（port，留空则运行时分配）</label>
-            <input type="number" min="0" max="65535" x-model.number="editConfig.port"
-              class="input input-bordered input-md w-full font-mono" />
-          </div>
           <div class="form-control">
             <div class="flex justify-between items-center">
               <label class="label text-xs font-semibold">环境变量（env）</label>
@@ -319,6 +314,11 @@
                 </div>
               </template>
             </div>
+          </div>
+          <div class="form-control gap-1">
+            <label class="label py-1 text-xs font-semibold">端口（port，留空则运行时分配）</label>
+            <input type="number" min="0" max="65535" x-model.number="editConfig.port"
+              class="input input-bordered input-md w-full font-mono" />
           </div>
           <div class="form-control">
             <label class="label text-xs font-semibold">空闲休眠超时（idle_timeout）</label>

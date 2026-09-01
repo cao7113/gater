@@ -21,7 +21,6 @@ import (
 
 const (
 	defaultPort      = "8080"
-	defaultAdminHost = "admin.lab"
 	defaultStorePath = "~/.config/gater/store.yaml"
 	shutdownTimeout  = 5 * time.Second
 )
@@ -29,7 +28,8 @@ const (
 type options struct {
 	port        string
 	storePath   string
-	adminHost   string
+	adminHosts  string
+	targetHost  string
 	suffixes    []config.AppSuffix
 	showVersion bool
 }
@@ -49,13 +49,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化存储层失败: %v", err)
 	}
+	config.TargetHost = opts.targetHost
+	config.SetAdminHosts(opts.adminHosts)
 
 	var suffixes []config.AppSuffix
 	if len(opts.suffixes) > 0 {
 		suffixes = opts.suffixes
 	}
 	mgr := manager.New(ctx, st, suffixes)
-	server := entry.New(entry.Config{Port: opts.port, AdminHost: opts.adminHost, StorePath: opts.storePath, AppSuffixes: opts.suffixes}, mgr)
+	server := entry.New(entry.Config{AdminPort: opts.port, StorePath: opts.storePath, AppSuffixes: opts.suffixes}, mgr)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
@@ -74,7 +76,7 @@ func main() {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("Gater server ready | admin: http://%s:%s", opts.adminHost, opts.port)
+	log.Printf("Gater server ready | admin: http://%s:%s", config.AdminHosts[0], opts.port)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Gater 异常中断: %v", err)
 	}
@@ -84,9 +86,10 @@ func parseOptions() options {
 	defaultSuffixesStr := env("GATER_SUFFIXES", "")
 
 	defaults := options{
-		port:      env("PORT", defaultPort),
-		storePath: env("GATER_STORE", defaultStorePath),
-		adminHost: env("ADMIN_HOST", defaultAdminHost),
+		port:       env("PORT", defaultPort),
+		storePath:  env("GATER_STORE", defaultStorePath),
+		adminHosts: env("ADMIN_HOSTS", strings.Join(config.DefaultAdminHosts, ",")),
+		targetHost: env("GATER_TARGET_HOST", config.DefaultTargetHost),
 	}
 
 	flags := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
@@ -97,7 +100,8 @@ func parseOptions() options {
 	showVersion := flags.BoolP("version", "v", false, "显示版本")
 	port := flags.StringP("port", "p", defaults.port, "HTTP 服务端口")
 	storePath := flags.StringP("store", "s", defaults.storePath, "应用注册表文件路径")
-	adminHost := flags.StringP("admin-host", "a", defaults.adminHost, "管理控制台域名")
+	adminHosts := flags.StringP("admin-host", "a", defaults.adminHosts, "管理控制台域名列表，逗号分隔")
+	targetHost := flags.String("target-host", defaults.targetHost, "目标应用服务器地址")
 	suffixesStr := flags.String("suffixes", defaultSuffixesStr,
 		`代理加载时识别应用的 hostname 后缀列表，逗号分隔（例: .l.s,.lab,.l.h 或 https:.l.s,http:.lab）。为空时使用内置默认列表`)
 
@@ -113,7 +117,7 @@ func parseOptions() options {
 	}
 	return options{
 		port: *port, storePath: expandHome(*storePath),
-		adminHost: *adminHost, showVersion: *showVersion,
+		adminHosts: *adminHosts, targetHost: *targetHost, showVersion: *showVersion,
 		suffixes: suffixes,
 	}
 }

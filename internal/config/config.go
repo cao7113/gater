@@ -11,7 +11,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultIdleTimeout = "10m"
+const (
+	DefaultIdleTimeout = "10m"
+	DefaultTargetHost  = "127.0.0.1"
+)
+
+var TargetHost = DefaultTargetHost
 
 type AppConfig struct {
 	Name         string            `yaml:"name" json:"name"`

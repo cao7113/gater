@@ -39,8 +39,10 @@ type AppInfo struct {
 
 // ServerConfig 是 GET /api/config 返回的服务器运行时配置快照。
 type ServerConfig struct {
-	Port         string               `json:"port"`
+	Version      string               `json:"version"`
+	AdminPort    string               `json:"port"`
 	AdminHost    string               `json:"admin_host"`
+	TargetHost   string               `json:"target_host"`
 	StorePath    string               `json:"store_path"`
 	AppSuffixes  []config.AppSuffix   `json:"app_suffixes"`
 	AppTemplates []config.AppTemplate `json:"app_templates"`

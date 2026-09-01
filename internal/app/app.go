@@ -92,7 +92,7 @@ func NewApp(ac config.AppConfig) *App {
 			application.mu.RLock()
 			port := application.Port
 			application.mu.RUnlock()
-			r.SetURL(&url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", port)})
+			r.SetURL(&url.URL{Scheme: "http", Host: net.JoinHostPort(config.TargetHost, strconv.Itoa(port))})
 			// 透传真实请求 Header
 			r.Out.Header.Set("X-Forwarded-Host", r.In.Host)
 		},
@@ -146,7 +146,7 @@ func (a *App) Run(ctx context.Context) error {
 	if a.Cmd != nil && a.Cmd.Process != nil {
 		a.Pid = a.Cmd.Process.Pid
 	}
-	log.Printf("[Gater] [%s] 应用就绪，耗时 %dms，运行于 127.0.0.1:%d", a.Config.Name, a.StartupMs, a.Port)
+	log.Printf("[Gater] [%s] 应用就绪，耗时 %dms，运行于 %s", a.Config.Name, a.StartupMs, net.JoinHostPort(config.TargetHost, strconv.Itoa(a.Port)))
 
 	return nil
 }
@@ -321,7 +321,7 @@ func (a *App) waitForPortOrExit(ctx context.Context, processDone <-chan error) e
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	addr := fmt.Sprintf("127.0.0.1:%d", a.Port)
+	addr := net.JoinHostPort(config.TargetHost, strconv.Itoa(a.Port))
 	dialTimeout := 300 * time.Millisecond
 
 	for {

@@ -56,7 +56,7 @@ func (f *fakeMgr) AppSuffixes() []config.AppSuffix {
 	}
 }
 func (f *fakeMgr) ServerConfig() ServerConfig {
-	return ServerConfig{Port: "8080", AdminHost: "admin.lab", StorePath: "~/.config/gater/store.yaml", AppSuffixes: f.AppSuffixes(), AppTemplates: config.DefaultAppTemplates}
+	return ServerConfig{AdminPort: "8080", AdminHost: "admin.lab", StorePath: "~/.config/gater/store.yaml", AppSuffixes: f.AppSuffixes(), AppTemplates: config.DefaultAppTemplates}
 }
 
 func testApp(name string) *app.App {
@@ -88,7 +88,7 @@ func TestGetConfig(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
 		t.Fatalf("decode ServerConfig error: %v", err)
 	}
-	if info.Port != "8080" || info.AdminHost != "admin.lab" || info.StorePath != "~/.config/gater/store.yaml" || len(info.AppSuffixes) != 2 {
+	if info.AdminPort != "8080" || info.AdminHost != "admin.lab" || info.StorePath != "~/.config/gater/store.yaml" || len(info.AppSuffixes) != 2 {
 		t.Fatalf("unexpected ServerConfig: %+v", info)
 	}
 	if len(info.AppTemplates) != 3 || info.AppTemplates[0].ID != config.AppTypePhx || info.AppTemplates[1].ID != "bun" || info.AppTemplates[2].ID != "python" {
