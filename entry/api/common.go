@@ -28,6 +28,7 @@ type AppInfo struct {
 	Cmd              string            `json:"cmd"`
 	Args             []string          `json:"args"`
 	Env              map[string]string `json:"env"`
+	ConfigPort       int               `json:"config_port"`
 	Port             int               `json:"port"`
 	State            string            `json:"state"`
 	IdleTimeoutSec   int               `json:"idle_timeout_sec"`

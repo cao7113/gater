@@ -69,6 +69,11 @@ func run(c *client, command string, args []string) error {
 			return errors.New("config 不接受参数")
 		}
 		return c.config()
+	case "next-port":
+		if len(args) != 0 {
+			return errors.New("next-port 不接受参数")
+		}
+		return c.nextPort()
 	case "show", "view":
 		return c.show(oneAppArg(command, args))
 	case "runtime", "env":
@@ -111,6 +116,17 @@ func (c *client) config() error {
 	}
 	_, err = fmt.Print(content)
 	return err
+}
+
+func (c *client) nextPort() error {
+	var response struct {
+		Port int `json:"port"`
+	}
+	if err := c.post("/api/next-port", &response); err != nil {
+		return err
+	}
+	fmt.Println(response.Port)
+	return nil
 }
 
 func (c *client) show(name string) error {
@@ -296,6 +312,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "\n命令:")
 	fmt.Fprintln(os.Stderr, "  list              列出所有应用")
 	fmt.Fprintln(os.Stderr, "  config            显示 store 配置")
+	fmt.Fprintln(os.Stderr, "  next-port         获取一个可用的本地应用端口")
 	fmt.Fprintln(os.Stderr, "  show <app>        查看应用配置与状态")
 	fmt.Fprintln(os.Stderr, "  runtime <app>     查看运行配置（默认脱敏；--show-sensitive 显示敏感值）")
 	fmt.Fprintln(os.Stderr, "  logs <app>        查看应用日志")

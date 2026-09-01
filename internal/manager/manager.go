@@ -18,7 +18,6 @@ type Manager struct {
 	mu              sync.RWMutex
 	apps            map[string]*app.App
 	store           *store.Store
-	nextPort        int
 	ctx             context.Context
 	allowedSuffixes []config.AppSuffix
 }
@@ -31,7 +30,6 @@ func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *
 	m := &Manager{
 		apps:            make(map[string]*app.App),
 		store:           st,
-		nextPort:        50001,
 		ctx:             ctx,
 		allowedSuffixes: allowedSuffixes,
 	}
@@ -104,10 +102,7 @@ func (m *Manager) UpdateApp(name string, cfg config.AppConfig) error {
 }
 
 func (m *Manager) registerInstance(ac config.AppConfig) *app.App {
-	port := m.nextPort
-	m.nextPort++
-
-	instance := app.NewApp(ac, port)
+	instance := app.NewApp(ac)
 	m.apps[ac.Name] = instance
 
 	go instance.MonitorIdle(m.ctx)

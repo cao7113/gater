@@ -19,7 +19,7 @@ Alpine.data('dashboard', () => ({
   configYaml: '',
   configShell: '',
   runtimeData: null,
-  editConfig: { name: '', app_type: '', cwd: '', cmd: '', args: [], idle_timeout: '', env: {} },
+  editConfig: { name: '', app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
   envEntries: [],
   registerEnvEntries: [],
   appSuffixes: [],
@@ -31,7 +31,8 @@ Alpine.data('dashboard', () => ({
     app_type: '',
     cmd: '',
     argsInput: '',
-    idle_timeout: '5m'
+    idle_timeout: '5m',
+    port: ''
   },
 
   init() {
@@ -127,6 +128,7 @@ Alpine.data('dashboard', () => ({
       cwd: app.cwd,
       cmd: app.cmd,
       args: [...(app.args || [])],
+      port: app.config_port || 0,
       idle_timeout: app.idle_timeout_sec ? `${app.idle_timeout_sec}s` : '',
       env: { ...(app.env || {}) }
     };
@@ -175,6 +177,7 @@ Alpine.data('dashboard', () => ({
       cwd: this.editConfig.cwd.trim(),
       cmd: this.editConfig.cmd.trim(),
       args: this.editConfig.args,
+      port: Number(this.editConfig.port) || 0,
       env,
       idle_timeout: this.editConfig.idle_timeout.trim()
     };
@@ -348,6 +351,7 @@ Alpine.data('dashboard', () => ({
       cwd,
       cmd: cmd,
       args: this.form.argsInput.trim() ? this.form.argsInput.trim().split(/\s+/) : [],
+      port: Number(this.form.port) || 0,
       env: Object.fromEntries(this.registerEnvEntries
         .map(entry => [entry.key.trim(), entry.value])
         .filter(([key]) => key)),
@@ -373,7 +377,7 @@ Alpine.data('dashboard', () => ({
       }
 
       this.showToast(`应用 [${name}] 注册成功`, 'success');
-      this.form = { name: '', cwd: '', app_type: '', cmd: '', argsInput: '', idle_timeout: '5m' };
+      this.form = { name: '', cwd: '', app_type: '', cmd: '', argsInput: '', idle_timeout: '5m', port: '' };
       this.registerEnvEntries = [];
       this.closeAddModal();
       await this.fetchApps();

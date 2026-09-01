@@ -21,6 +21,7 @@ type AppConfig struct {
 	Cmd          string            `yaml:"cmd" json:"cmd"`
 	Args         []string          `yaml:"args" json:"args"`
 	Env          map[string]string `yaml:"env" json:"env"`
+	Port         int               `yaml:"port,omitempty" json:"port,omitempty"`
 	IdleTimeout  string            `yaml:"idle_timeout" json:"idle_timeout"`
 }
 
@@ -97,6 +98,9 @@ func Validate(cfg AppConfig) error {
 	}
 	if strings.TrimSpace(cfg.DomainSuffix) == "" {
 		return fmt.Errorf("缺少 domain_suffix")
+	}
+	if cfg.Port < 0 || cfg.Port > 65535 {
+		return fmt.Errorf("port 无效: %d", cfg.Port)
 	}
 
 	duration, err := ParseTimeout(cfg.IdleTimeout)

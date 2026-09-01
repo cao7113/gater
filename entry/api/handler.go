@@ -41,6 +41,15 @@ func (h *handler) pickYAMLFile(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (h *handler) nextPort(w http.ResponseWriter, _ *http.Request) {
+	port, err := app.NextPort()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"port": port})
+}
+
 func (h *handler) listApps(w http.ResponseWriter, _ *http.Request) {
 	apps := h.mgr.GetAllApps()
 	items := make([]AppInfo, 0, len(apps))
@@ -160,6 +169,10 @@ func (h *handler) getAppConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("应用 [%s] 不存在", name))
 		return
 	}
+	port := application.Port
+	if port == 0 {
+		port = application.Config.Port
+	}
 	yamlData, err := yaml.Marshal(application.Config)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "生成 YAML 配置失败: "+err.Error())
@@ -167,7 +180,7 @@ func (h *handler) getAppConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"yaml":  string(yamlData),
-		"shell": shellCommand(application.Config, application.Port),
+		"shell": shellCommand(application.Config, port),
 	})
 }
 
@@ -277,6 +290,7 @@ func appToInfo(a *app.App) AppInfo {
 		Cmd:              a.Config.Cmd,
 		Args:             a.Config.Args,
 		Env:              a.Config.Env,
+		ConfigPort:       a.Config.Port,
 		Port:             a.Port,
 		State:            string(a.State),
 		IdleTimeoutSec:   int(a.Timeout.Seconds()),

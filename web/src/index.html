@@ -125,7 +125,7 @@
               <div
                 class="flex justify-between items-center text-[11px] pt-2 border-t border-base-content/10 text-base-content/70">
                 <div><span class="text-base-content/40">内部端口:</span> <span class="font-bold text-base-content"
-                    x-text="app.port"></span></div>
+                    x-text="app.port || (app.config_port ? app.config_port + '（固定）' : '运行时分配')"></span></div>
                 <div><span class="text-base-content/40">空闲超时:</span> <span class="font-bold text-base-content"
                     x-text="app.idle_timeout_sec + 's'"></span></div>
                 <div x-show="app.args && app.args.length"><span class="text-base-content/40">参数数量:</span> <span
@@ -297,6 +297,11 @@
               </template>
             </div>
           </div>
+          <div class="form-control gap-1">
+            <label class="label py-1 text-xs font-semibold">端口（port，留空则运行时分配）</label>
+            <input type="number" min="0" max="65535" x-model.number="editConfig.port"
+              class="input input-bordered input-md w-full font-mono" />
+          </div>
           <div class="form-control">
             <div class="flex justify-between items-center">
               <label class="label text-xs font-semibold">环境变量（env）</label>
@@ -365,7 +370,9 @@
             </div>
             <div class="bg-base-200 rounded-lg p-3">
               <div class="text-base-content/60">端口</div>
-              <div class="font-bold text-base-content" x-text="runtimeData.port"></div>
+              <div class="font-bold text-base-content"
+                x-text="runtimeData.port || (runtimeData.config_port ? runtimeData.config_port + '（固定，未运行）' : '运行时分配')">
+              </div>
             </div>
             <div class="bg-base-200 rounded-lg p-3">
               <div class="text-base-content/60">PID</div>
@@ -492,6 +499,11 @@
                 </div>
               </template>
             </div>
+          </div>
+          <div class="form-control mb-3">
+            <label class="label text-xs font-semibold">端口（port，留空则运行时分配）</label>
+            <input type="number" min="0" max="65535" x-model.number="form.port"
+              class="input input-bordered input-sm w-full min-w-0 font-mono" />
           </div>
           <div class="form-control mb-5">
             <div class="flex items-center gap-2">

@@ -54,15 +54,13 @@ type App struct {
 }
 
 // NewApp 创建并初始化应用实例
-func NewApp(ac config.AppConfig, port int) *App {
+func NewApp(ac config.AppConfig) *App {
 	timeout := 10 * time.Minute
 	if ac.IdleTimeout != "" {
 		if d, err := time.ParseDuration(ac.IdleTimeout); err == nil {
 			timeout = d
 		}
 	}
-
-	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
 
 	// 1. 生产级 Transport 配置（优化连接池与超时，避免连接泄露）
 	transport := &http.Transport{
@@ -78,10 +76,23 @@ func NewApp(ac config.AppConfig, port int) *App {
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	application := &App{
+		Config:     ac,
+		Port:       DynamicPort,
+		State:      StateStopped,
+		Timeout:    timeout,
+		LastActive: time.Now(),
+		LogBuf:     NewLogBuffer(1000), // 复用本地 log.go 中的 NewLogBuffer
+		RuntimeEnv: make(map[string]string),
+	}
+
 	// 2. 使用 Rewrite 并配置优雅的 ErrorHandler（防止 502/断连导致进程崩溃）
-	proxy := &httputil.ReverseProxy{
+	application.Proxy = &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
-			r.SetURL(targetURL)
+			application.mu.RLock()
+			port := application.Port
+			application.mu.RUnlock()
+			r.SetURL(&url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", port)})
 			// 透传真实请求 Header
 			r.Out.Header.Set("X-Forwarded-Host", r.In.Host)
 		},
@@ -89,16 +100,7 @@ func NewApp(ac config.AppConfig, port int) *App {
 		ErrorHandler: NewProxyErrorHandler(ac.Name), // 独立函数调用,
 	}
 
-	return &App{
-		Config:     ac,
-		Port:       port,
-		State:      StateStopped,
-		Timeout:    timeout,
-		LastActive: time.Now(),
-		Proxy:      proxy,
-		LogBuf:     NewLogBuffer(1000), // 复用本地 log.go 中的 NewLogBuffer
-		RuntimeEnv: make(map[string]string),
-	}
+	return application
 }
 
 // ============================================================================
@@ -131,6 +133,7 @@ func (a *App) Run(ctx context.Context) error {
 		a.State = StateCrashed
 		_, _ = a.LogBuf.Write([]byte(err.Error() + "\n"))
 		a.cleanCmdLocked()
+		a.releasePortLocked()
 		return err
 	}
 
@@ -156,6 +159,15 @@ func (a *App) startAppLocked(ctx context.Context) error {
 	}
 	if _, err := exec.LookPath(a.Config.Cmd); err != nil {
 		return fmt.Errorf("未找到启动命令 [%s]，请确认是否已安装或检查 PATH 环境变量", a.Config.Cmd)
+	}
+	if a.Config.Port > 0 {
+		a.Port = a.Config.Port
+	} else {
+		port, err := NextPort()
+		if err != nil {
+			return err
+		}
+		a.Port = port
 	}
 
 	// 2. 构建类型上下文并执行启动前 Hook
@@ -226,6 +238,8 @@ func (a *App) Stop() {
 	log.Printf("[Gater] [%s] 正在停止应用...", a.Config.Name)
 	a.stopCmdLocked(syscall.SIGTERM) // 优先尝试 SIGTERM 优雅退出，超时后自动强杀
 	a.State = StateStopped
+	a.Pid = 0
+	a.releasePortLocked()
 	log.Printf("[Gater] [%s] 进程组已彻底清理", a.Config.Name)
 }
 
@@ -266,6 +280,11 @@ func (a *App) GetState() State {
 	return a.State
 }
 
+// releasePortLocked 清理当前运行实例的端口，调用方必须持有 a.mu。
+func (a *App) releasePortLocked() {
+	a.Port = DynamicPort
+}
+
 // ============================================================================
 // 2. 进程与底层辅助逻辑 (Process & Helper Routines)
 // ============================================================================
@@ -289,6 +308,8 @@ func (a *App) waitTargetProcess(cmd *exec.Cmd, processDone chan<- error) {
 	if a.Cmd == cmd && a.State == StateRunning {
 		log.Printf("[Gater] [%s] 进程意外退出: %v", a.Config.Name, err)
 		a.State = StateCrashed
+		a.Pid = 0
+		a.releasePortLocked()
 	}
 }
 
@@ -461,6 +482,7 @@ func (a *App) snapshot(showSensitive bool) map[string]any {
 		"cmd":          a.Config.Cmd,
 		"args":         append([]string(nil), a.Config.Args...),
 		"env":          env,
+		"config_port":  a.Config.Port,
 		"port":         a.Port,
 		"pid":          a.Pid,
 		"startup_ms":   a.StartupMs,

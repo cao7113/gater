@@ -19,9 +19,11 @@ func TestEnvironment(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
 		DomainSuffix: ".l.s",
+		Port:         50001,
 		Env: map[string]string{
 			"FOO": "bar", "aPort": "${PORT}"},
-	}, 50001)
+	})
+	application.Port = application.Config.Port
 
 	values := make(map[string]string)
 	if application.Domain() != "demo.l.s" {
@@ -45,7 +47,7 @@ func TestEnvironment(t *testing.T) {
 }
 
 func TestURLUsesAppDomain(t *testing.T) {
-	application := NewApp(config.AppConfig{Name: "demo", DomainSuffix: ".l.h"}, 50001)
+	application := NewApp(config.AppConfig{Name: "demo", DomainSuffix: ".l.h"})
 	if got := application.URL(); got != "http://demo.l.h" {
 		t.Fatalf("URL() = %q, want http://demo.l.h", got)
 	}
@@ -61,7 +63,7 @@ func TestSnapshotRedactsSensitiveEnvByDefault(t *testing.T) {
 			"APP_MODE":  "dev",
 			"API_TOKEN": "secret-value",
 		},
-	}, 50001)
+	})
 	application.State = StateRunning
 	application.RuntimeEnv = map[string]string{
 		"APP_MODE":  "dev",
@@ -85,7 +87,7 @@ func TestSnapshotUsesConfiguredEnvWhenNotRunning(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name: "demo",
 		Env:  map[string]string{"APP_MODE": "dev"},
-	}, 50001)
+	})
 
 	snapshot := application.Snapshot()
 	env := snapshot["env"].(map[string]string)
@@ -100,7 +102,7 @@ func TestRunRejectsMissingWorkingDirectory(t *testing.T) {
 		DomainSuffix: ".l.h",
 		Cwd:          "/path/that/does/not/exist",
 		Cmd:          "echo",
-	}, 50001)
+	})
 
 	err := application.Run(context.Background())
 	if err == nil {
@@ -117,7 +119,7 @@ func TestRunRejectsMissingCommand(t *testing.T) {
 		DomainSuffix: ".l.h",
 		Cwd:          t.TempDir(),
 		Cmd:          "command-that-does-not-exist",
-	}, 50001)
+	})
 
 	err := application.Run(context.Background())
 	if err == nil {
@@ -146,7 +148,8 @@ func TestRunRunsAndStopsApplication(t *testing.T) {
 		Cmd:          "python3",
 		Args:         []string{"-m", "http.server", "$PORT"},
 		IdleTimeout:  "1m",
-	}, port)
+		Port:         port,
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -190,7 +193,8 @@ func TestConcurrentRun(t *testing.T) {
 		Cwd:          t.TempDir(),
 		Cmd:          "python3",
 		Args:         []string{"-m", "http.server", "$PORT"},
-	}, port)
+		Port:         port,
+	})
 
 	const concurrency = 10
 	var wg sync.WaitGroup

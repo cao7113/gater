@@ -36,7 +36,7 @@ func (f *fakeMgr) RegisterApp(cfg config.AppConfig) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("missing name")
 	}
-	f.apps[cfg.Name] = app.NewApp(cfg, 59001)
+	f.apps[cfg.Name] = app.NewApp(cfg)
 	return nil
 }
 func (f *fakeMgr) UpdateApp(name string, cfg config.AppConfig) error {
@@ -44,7 +44,7 @@ func (f *fakeMgr) UpdateApp(name string, cfg config.AppConfig) error {
 		return fmt.Errorf("not found")
 	}
 	cfg.Name = name
-	f.apps[name] = app.NewApp(cfg, f.apps[name].Port)
+	f.apps[name] = app.NewApp(cfg)
 	return nil
 }
 func (f *fakeMgr) RemoveApp(name string) error  { delete(f.apps, name); return nil }
@@ -60,7 +60,7 @@ func (f *fakeMgr) ServerConfig() ServerConfig {
 }
 
 func testApp(name string) *app.App {
-	return app.NewApp(config.AppConfig{Name: name, Cmd: "echo", Args: []string{"hello"}}, 59001)
+	return app.NewApp(config.AppConfig{Name: name, Cmd: "echo", Args: []string{"hello"}})
 }
 
 func TestListAppsEmpty(t *testing.T) {
@@ -93,6 +93,23 @@ func TestGetConfig(t *testing.T) {
 	}
 	if len(info.AppTemplates) != 3 || info.AppTemplates[0].ID != config.AppTypePhx || info.AppTemplates[1].ID != "bun" || info.AppTemplates[2].ID != "python" {
 		t.Fatalf("unexpected app templates: %+v", info.AppTemplates)
+	}
+}
+
+func TestNextPort(t *testing.T) {
+	res := httptest.NewRecorder()
+	(&handler{mgr: newFakeMgr()}).nextPort(res, httptest.NewRequest(http.MethodPost, "/api/next-port", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", res.Code)
+	}
+	var response struct {
+		Port int `json:"port"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response error: %v", err)
+	}
+	if response.Port <= 0 || response.Port > 65535 {
+		t.Fatalf("unexpected port: %d", response.Port)
 	}
 }
 
@@ -330,8 +347,9 @@ func TestGetAppConfigIncludesYAMLAndShell(t *testing.T) {
 		Cmd:          "sh",
 		Args:         []string{"-c", "python3 -m http.server $PORT"},
 		Env:          map[string]string{"FOO": "bar baz", "PORT": "ignored"},
+		Port:         59001,
 		IdleTimeout:  "10m",
-	}, 59001)
+	})
 	req := httptest.NewRequest(http.MethodGet, "/api/apps/myapp/config", nil)
 	req.SetPathValue("name", "myapp")
 	res := httptest.NewRecorder()

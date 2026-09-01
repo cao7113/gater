@@ -19,11 +19,8 @@
 
 ## todo
 
-- port 应该只在 运行时分配，避免大量port占有，还有其它资源占有情况分析
-
 - web page version text
 - app target host config, now only 127.0.0.1
-
 - beautiful docs
 - gater run mode: dev or prod? with standalone store path
 - what relationship app-log and gater-log
