@@ -17,18 +17,12 @@
 - 访问admin 的页面
   - 查看应用列表，运行状态，距离关闭还有多久，查看运行log
 
-## todo
-
-- what relationship app-log and gater-log, manual refresh interval
-
-- beautiful docs
-- app config registry
-
 ## DNS resolver
 
 todo
 
 - dnsmasq + caddy
+- dig coredns
 
 ## AppType Handler
 
@@ -93,17 +87,3 @@ CLI 部分
 - 主要通过选择 app.yaml 方式创建
 
 先评估和优化方案，确认后再执行
-
-## Golang
-
-常用参数说明
--v：输出详细日志（会打印 t.Log 以及每个测试函数的 PASS/FAIL 状态）。
-
--run <regexp>：使用正则表达式匹配要运行的测试函数名。
-
--count=1：强制禁用测试缓存（如果你改了配置文件或环境变量，建议加上）。
-
-示例组合：
-
-Bash
-go test -v -count=1 -run TestEnsureRunning ./internal/app

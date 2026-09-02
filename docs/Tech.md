@@ -11,3 +11,17 @@ Go 将 ReverseProxy 放在标准库中，意味着你不需要引入任何第三
 
 追求绝对隔离与长连接高容错：选 Elixir (Plug + Mint)
 如果你的应用重度依赖实时 WebSocket、需要防范各类不可预知的上游崩溃，且希望系统具备“任凭风浪起，自我修复（Let it crash）”的特性，Elixir 的生态表现会非常惊艳。
+
+## Golang
+
+常用参数说明
+-v：输出详细日志（会打印 t.Log 以及每个测试函数的 PASS/FAIL 状态）。
+
+-run <regexp>：使用正则表达式匹配要运行的测试函数名。
+
+-count=1：强制禁用测试缓存（如果你改了配置文件或环境变量，建议加上）。
+
+示例组合：
+
+Bash
+go test -v -count=1 -run TestEnsureRunning ./internal/app
