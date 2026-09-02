@@ -477,10 +477,18 @@
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
               <label class="label text-xs font-semibold">启动参数（args）(可用变量：${PORT}, ${APP_DOMAIN})</label>
-              <span class="text-[10px] text-base-content/50 font-mono">支持 $PORT 变量</span>
+              <button type="button" @click="addRegisterArg()" class="btn btn-ghost btn-xs">+ 添加参数</button>
             </div>
-            <input type="text" x-model="form.argsInput" placeholder="-m http.server $PORT"
-              class="input input-bordered input-sm w-full min-w-0 font-mono" />
+            <div class="space-y-1">
+              <template x-for="(arg, index) in registerArgs" :key="index">
+                <div class="join w-full">
+                  <input type="text" x-model="registerArgs[index]" placeholder="-m 或 http.server 或 $PORT"
+                    class="input input-bordered input-sm join-item w-full min-w-0 font-mono" />
+                  <button type="button" @click="removeRegisterArg(index)"
+                    class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
           </div>
           <div class="form-control mb-3">
             <div class="flex justify-between items-center">
@@ -557,11 +565,19 @@
             <span class="w-2 h-2 rounded-full bg-success animate-ping"></span>
             <span x-text="getAppURL(logAppName) + ' 日志追踪'"></span>
           </h3>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap justify-end">
             <label class="label cursor-pointer gap-1.5 text-xs text-neutral-content/70">
               <input type="checkbox" x-model="autoScroll" class="checkbox checkbox-xs checkbox-primary" />
               <span>自动触底</span>
             </label>
+            <select x-model="logRefreshStrategy" @change="onLogRefreshStrategyChange()"
+              class="select select-bordered select-xs bg-neutral text-neutral-content border-neutral-content/20">
+              <option value="manual">手动刷新</option>
+              <option value="5s">5秒刷新</option>
+              <option value="10s">10秒刷新</option>
+              <option value="15s">15秒刷新</option>
+            </select>
+            <button type="button" @click="fetchLogs()" class="btn btn-xs btn-outline btn-primary">刷新</button>
             <button type="button" @click="copyLogs()" class="btn btn-xs btn-outline btn-primary">复制全部</button>
             <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeLogs()">✕</button>
           </div>

@@ -7,6 +7,13 @@ Alpine.data('dashboard', () => ({
   logText: '',
   logTimer: null,
   autoScroll: true,
+  logRefreshStrategy: 'manual',
+  logRefreshMap: {
+    manual: 0,
+    '5s': 5000,
+    '10s': 10000,
+    '15s': 15000
+  },
   toasts: [],
   actionLoading: {},
   appToDelete: null,
@@ -20,6 +27,7 @@ Alpine.data('dashboard', () => ({
   configShell: '',
   runtimeData: null,
   editConfig: { name: '', app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
+  registerArgs: [],
   envEntries: [],
   registerEnvEntries: [],
   appSuffixes: [],
@@ -31,7 +39,6 @@ Alpine.data('dashboard', () => ({
     cwd: '',
     app_type: '',
     cmd: '',
-    argsInput: '',
     idle_timeout: '5m',
     port: ''
   },
@@ -164,6 +171,14 @@ Alpine.data('dashboard', () => ({
 
   removeRegisterEnvEntry(index) {
     this.registerEnvEntries.splice(index, 1);
+  },
+
+  addRegisterArg() {
+    this.registerArgs.push('');
+  },
+
+  removeRegisterArg(index) {
+    this.registerArgs.splice(index, 1);
   },
 
   async saveAppConfig() {
@@ -325,13 +340,13 @@ Alpine.data('dashboard', () => ({
   },
 
   fillPreset(preset) {
-    const hasValues = this.form.app_type || this.form.cmd || this.form.argsInput || this.registerEnvEntries.some(entry => entry.key || entry.value);
+    const hasValues = this.form.app_type || this.form.cmd || this.registerArgs.some(arg => arg.trim()) || this.registerEnvEntries.some(entry => entry.key || entry.value);
     if (hasValues && !window.confirm(`当前启动配置不为空，确定使用「${preset.label}」覆盖吗？`)) {
       return;
     }
     this.form.app_type = preset.app_type || '';
     this.form.cmd = preset.cmd || '';
-    this.form.argsInput = (preset.args || []).join(' ');
+    this.registerArgs = [...(preset.args || [])];
     this.form.idle_timeout = preset.idle_timeout || '5m';
     this.registerEnvEntries = preset.env;
   },
@@ -352,7 +367,7 @@ Alpine.data('dashboard', () => ({
       app_type: this.form.app_type.trim(),
       cwd,
       cmd: cmd,
-      args: this.form.argsInput.trim() ? this.form.argsInput.trim().split(/\s+/) : [],
+      args: this.registerArgs.map(arg => arg.trim()).filter(Boolean),
       port: Number(this.form.port) || 0,
       env: Object.fromEntries(this.registerEnvEntries
         .map(entry => [entry.key.trim(), entry.value])
@@ -379,7 +394,8 @@ Alpine.data('dashboard', () => ({
       }
 
       this.showToast(`应用 [${name}] 注册成功`, 'success');
-      this.form = { name: '', cwd: '', app_type: '', cmd: '', argsInput: '', idle_timeout: '5m', port: '' };
+      this.form = { name: '', cwd: '', app_type: '', cmd: '', idle_timeout: '5m', port: '' };
+      this.registerArgs = [];
       this.registerEnvEntries = [];
       this.closeAddModal();
       await this.fetchApps();
@@ -464,8 +480,15 @@ Alpine.data('dashboard', () => ({
     const modal = document.getElementById('log_modal');
     if (modal) modal.showModal();
     await this.fetchLogs();
+    this.startLogRefresh();
+  },
+
+  startLogRefresh() {
     if (this.logTimer) clearInterval(this.logTimer);
-    this.logTimer = setInterval(() => this.fetchLogs(), 1500);
+    const interval = this.logRefreshMap[this.logRefreshStrategy];
+    if (interval > 0) {
+      this.logTimer = setInterval(() => this.fetchLogs(), interval);
+    }
   },
 
   async fetchLogs() {
@@ -495,6 +518,10 @@ Alpine.data('dashboard', () => ({
     } catch (err) {
       this.showToast('复制失败，请手动选择复制', 'error');
     }
+  },
+
+  onLogRefreshStrategyChange() {
+    this.startLogRefresh();
   },
 
   closeLogs() {

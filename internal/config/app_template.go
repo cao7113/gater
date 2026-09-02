@@ -49,7 +49,7 @@ var DefaultAppTemplates = []AppTemplate{
 		Label:   "Python HTTP",
 		AppType: "python",
 		Cmd:     "python3",
-		Args:    []string{"-m", "http.server", "${PORT}"},
+		Args:    []string{"-m http.server ${PORT}"},
 		Env: []EnvKV{
 			{Key: "PORT", Value: "${PORT}"},
 		},

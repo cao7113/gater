@@ -82,7 +82,7 @@ func NewApp(ac config.AppConfig) *App {
 		State:      StateStopped,
 		Timeout:    timeout,
 		LastActive: time.Now(),
-		LogBuf:     NewLogBuffer(1000), // 复用本地 log.go 中的 NewLogBuffer
+		LogBuf:     NewLogBuffer(1000),
 		RuntimeEnv: make(map[string]string),
 	}
 

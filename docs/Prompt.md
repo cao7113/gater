@@ -19,9 +19,8 @@
 
 ## todo
 
-- registration args should be args same with edit form
-
 - what relationship app-log and gater-log, manual refresh interval
+
 - beautiful docs
 - app config registry
 
