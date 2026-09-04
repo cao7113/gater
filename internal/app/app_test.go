@@ -17,7 +17,7 @@ import (
 func TestEnvironment(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
-		DomainSuffix: ".l.s",
+		DomainSuffix: ".s",
 		Port:         50001,
 		Env: map[string]string{
 			"FOO": "bar", "aPort": "${PORT}"},
@@ -25,8 +25,8 @@ func TestEnvironment(t *testing.T) {
 	application.Port = application.Config.Port
 
 	values := make(map[string]string)
-	if application.Domain() != "demo.l.s" {
-		t.Fatalf("Domain() = %q, want demo.l.s", application.Domain())
+	if application.Domain() != "demo.s" {
+		t.Fatalf("Domain() = %q, want demo.s", application.Domain())
 	}
 	appTypeContext := application.newAppTypeContext()
 	if err := types.HandlerFor(application.Config.AppType).Prepare(appTypeContext); err != nil {
@@ -46,12 +46,12 @@ func TestEnvironment(t *testing.T) {
 }
 
 func TestURLUsesAppDomain(t *testing.T) {
-	application := NewApp(config.AppConfig{Name: "demo", DomainSuffix: ".l.h"})
-	if got := application.URL(); got != "http://demo.l.h" {
-		t.Fatalf("URL() = %q, want http://demo.l.h", got)
+	application := NewApp(config.AppConfig{Name: "demo", DomainSuffix: ".l"})
+	if got := application.URL(); got != "http://demo.l" {
+		t.Fatalf("URL() = %q, want http://demo.l", got)
 	}
-	if got := application.URL("https"); got != "https://demo.l.h" {
-		t.Fatalf("URL(https) = %q, want https://demo.l.h", got)
+	if got := application.URL("https"); got != "https://demo.l" {
+		t.Fatalf("URL(https) = %q, want https://demo.l", got)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestSnapshotUsesConfiguredEnvWhenNotRunning(t *testing.T) {
 func TestRunRejectsMissingWorkingDirectory(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
-		DomainSuffix: ".l.h",
+		DomainSuffix: ".l",
 		Cwd:          "/path/that/does/not/exist",
 		Cmd:          "echo",
 	})
@@ -115,7 +115,7 @@ func TestRunRejectsMissingWorkingDirectory(t *testing.T) {
 func TestRunRejectsMissingCommand(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
-		DomainSuffix: ".l.h",
+		DomainSuffix: ".l",
 		Cwd:          t.TempDir(),
 		Cmd:          "command-that-does-not-exist",
 	})
@@ -140,7 +140,7 @@ func TestRunRunsAndStopsApplication(t *testing.T) {
 
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
-		DomainSuffix: ".l.h",
+		DomainSuffix: ".l",
 		Cwd:          t.TempDir(),
 		Cmd:          "python3",
 		Args:         []string{"-m", "http.server", "$PORT"},
@@ -159,7 +159,7 @@ func TestRunRunsAndStopsApplication(t *testing.T) {
 	}
 
 	// 验证反向代理请求重写功能 (针对 Go 1.18+ Rewrite 接口)
-	req := httptest.NewRequest("GET", "http://demo.l.h/", nil)
+	req := httptest.NewRequest("GET", "http://demo.l/", nil)
 	rec := httptest.NewRecorder()
 	application.Proxy.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -184,7 +184,7 @@ func TestConcurrentRun(t *testing.T) {
 
 	application := NewApp(config.AppConfig{
 		Name:         "demo",
-		DomainSuffix: ".l.h",
+		DomainSuffix: ".l",
 		Cwd:          t.TempDir(),
 		Cmd:          "python3",
 		Args:         []string{"-m", "http.server", "$PORT"},

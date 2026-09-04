@@ -14,7 +14,7 @@ func TestAddOrUpdateAppLoadsEnvFromAppConfig(t *testing.T) {
 	appDir := t.TempDir()
 	appYAML := `
 name: demo
-domain_suffix: .l.h
+domain_suffix: .l
 cmd: echo
 args:
 - foo
@@ -60,7 +60,7 @@ idle_timeout: 5m
 func TestAddOrUpdateAppLoadsConfigFromPath(t *testing.T) {
 	appDir := t.TempDir()
 	appFile := filepath.Join(appDir, "app.yaml")
-	if err := os.WriteFile(appFile, []byte("name: requested\ndomain_suffix: .l.h\ncmd: printf\nargs: [requested]\n"), 0600); err != nil {
+	if err := os.WriteFile(appFile, []byte("name: requested\ndomain_suffix: .l\ncmd: printf\nargs: [requested]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	st, err := store.NewStore(filepath.Join(t.TempDir(), "store.yaml"))
@@ -86,7 +86,7 @@ func TestAddOrUpdateAppLoadsConfigFromPath(t *testing.T) {
 func TestAddOrUpdateAppRejectsDuplicateName(t *testing.T) {
 	appDir := t.TempDir()
 	appFile := filepath.Join(appDir, "app.yaml")
-	if err := os.WriteFile(appFile, []byte("name: demo\ndomain_suffix: .l.h\ncmd: echo\n"), 0600); err != nil {
+	if err := os.WriteFile(appFile, []byte("name: demo\ndomain_suffix: .l\ncmd: echo\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	st, err := store.NewStore(filepath.Join(t.TempDir(), "store.yaml"))

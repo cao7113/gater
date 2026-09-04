@@ -1,5 +1,5 @@
 name: demo2
-# domain_suffix: .l.h
+# domain_suffix: .l
 # cwd: "auto-fill"
 cmd: "sh"
 env:

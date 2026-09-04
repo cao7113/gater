@@ -10,8 +10,8 @@ type AppSuffix struct {
 
 // DefaultSuffixes 是默认的应用域名后缀及协议列表。
 var DefaultSuffixes = []AppSuffix{
-	{Suffix: ".l.h", Scheme: "http"},
-	{Suffix: ".l.s", Scheme: "https"},
+	{Suffix: ".s", Scheme: "https"},
+	{Suffix: ".l", Scheme: "http"},
 }
 
 // AppSuffixes 是当前进程接受的应用域名后缀列表。
@@ -27,7 +27,7 @@ func IsTargetHost(host string) bool {
 	return false
 }
 
-// ParseAppSuffix 从字符串解析 AppSuffix（支持 "https:.l.s", ".l.s:https", ".l.s" 等格式）。
+// ParseAppSuffix 从字符串解析 AppSuffix（支持 "https:.s", ".s:https", ".s" 等格式）。
 func ParseAppSuffix(raw string) AppSuffix {
 	raw = strings.TrimSpace(raw)
 	if strings.HasPrefix(raw, "https:") || strings.HasPrefix(raw, "https://") {

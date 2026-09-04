@@ -12,7 +12,7 @@ func TestRoute(t *testing.T) {
 	admin := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
 	remote := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
 	originalHosts := config.AdminHosts
-	config.SetAdminHosts("admin.example,gater.l.s")
+	config.SetAdminHosts("admin.example,admin.lab")
 	defer func() { config.AdminHosts = originalHosts }()
 	originalSuffixes := config.AppSuffixes
 	config.AppSuffixes = []config.AppSuffix{{Suffix: ".lab", Scheme: "http"}}
@@ -25,7 +25,7 @@ func TestRoute(t *testing.T) {
 		want int
 	}{
 		{name: "configured admin host", host: "admin.example:8080", want: http.StatusTeapot},
-		{name: "second configured admin host", host: "gater.l.s", want: http.StatusTeapot},
+		{name: "second configured admin host", host: "admin.lab", want: http.StatusTeapot},
 		{name: "remote app", host: "demo.lab:8080", want: http.StatusAccepted},
 		{name: "unrelated host", host: "example.com:8080", want: http.StatusNotFound},
 	}

@@ -1,12 +1,12 @@
 # Gater - MacOS Web App Gateway
 
-Gater 是一个面向 macOS 本地环境的按需启动反向代理。它把已注册的应用映射到指定的域名，如`demo.l.s`，第一次访问时才启动应用，应用空闲后自动停止。
+Gater 是一个面向 macOS 本地环境的按需启动反向代理。它把已注册的应用映射到指定的域名，如`demo.s`，第一次访问时才启动应用，应用空闲后自动停止。
 
 ## 启动模型
 
 1. `gater` 启动时创建 Store 和 Manager，从 `~/.config/gater/store.yaml` 恢复已注册应用；恢复只创建内存实例，不会拉起子进程
 2. 通过 Web 控制台、API 或客户端注册应用
-3. 请求 `demo.l.s` 时，代理根据 Host 找到应用。应用不是 `running` 时进入 `starting`
+3. 请求 `demo.s` 时，代理根据 Host 找到应用。应用不是 `running` 时进入 `starting`
 4. 子进程使用独立进程组，标准输出和标准错误同时写入 Gater 日志与内存日志缓冲。
 5. 每次代理请求会刷新 `LastActive`。后台监视器每 3 秒检查空闲时间，超过 `idle_timeout` 就向进程组发送 `SIGINT`，3 秒后仍未退出则发送 `SIGKILL`。
 6. Gater 收到退出信号时取消全局 Context，停止所有应用，再关闭 HTTP 服务。

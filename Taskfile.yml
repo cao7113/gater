@@ -8,7 +8,7 @@ tasks:
 
   run: |
     go run cmd/server/main.go 
-    # http://admin.lab:8080
+    # http://admin.s:8080
 
   cli: |
     go run cmd/client/main.go

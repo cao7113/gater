@@ -9,12 +9,12 @@ import (
 func TestAppName(t *testing.T) {
 	suffixes := config.DefaultSuffixes
 	tests := map[string]string{
-		// .l.h 后缀
-		"demo.l.h":      "demo",
-		"demo.l.h:8080": "demo",
-		// .l.s 后缀
-		"demo.l.s":      "demo",
-		"demo.l.s:8080": "demo",
+		// .l 后缀
+		"demo.l":      "demo",
+		"demo.l:8080": "demo",
+		// .s 后缀
+		"demo.s":      "demo",
+		"demo.s:8080": "demo",
 		// IPv6
 		"[::1]:8080": "::1",
 		// 无匹配后缀，原样返回

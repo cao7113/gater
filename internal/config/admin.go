@@ -3,7 +3,8 @@ package config
 import "strings"
 
 // DefaultAdminHosts 是管理控制台默认接受的 Host 列表。
-var DefaultAdminHosts = []string{"admin.lab", "gater.lab"}
+var DefaultAdminHosts = []string{
+	"a.s", "a.l", "admin.s", "admin.l", "localhost"}
 
 // AdminHosts 是当前进程接受管理请求的 Host 列表。
 var AdminHosts = append([]string(nil), DefaultAdminHosts...)

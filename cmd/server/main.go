@@ -103,7 +103,7 @@ func parseOptions() options {
 	adminHosts := flags.StringP("admin-host", "a", defaults.adminHosts, "管理控制台域名列表，逗号分隔")
 	targetHost := flags.String("target-host", defaults.targetHost, "目标应用服务器地址")
 	suffixesStr := flags.String("suffixes", defaultSuffixesStr,
-		`代理加载时识别应用的 hostname 后缀列表，逗号分隔（例: .l.s,.lab,.l.h 或 https:.l.s,http:.lab）。为空时使用内置默认列表`)
+		`代理加载时识别应用的 hostname 后缀列表，逗号分隔（例: .s,.lab,.l 或 https:.s,http:.lab）。为空时使用内置默认列表`)
 
 	flags.Parse(os.Args[1:])
 

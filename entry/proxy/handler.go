@@ -33,7 +33,7 @@ func NewHandler(mgr *manager.Manager, suffixes []config.AppSuffix) http.Handler 
 		name := appName(r.Host, sorted)
 		app, ok := mgr.GetApp(name)
 		if !ok {
-			http.Error(w, fmt.Sprintf("Gater: 未注册的应用域名 [%s]", r.Host), http.StatusNotFound)
+			http.Error(w, fmt.Sprintf("Gater: 未注册的应用域名 [%s], 访问admin：%v", r.Host, config.AdminHosts), http.StatusNotFound)
 			return
 		}
 		if err := app.Run(r.Context()); err != nil {

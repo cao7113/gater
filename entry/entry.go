@@ -43,6 +43,29 @@ func New(cfg Config, mgr *manager.Manager) *http.Server {
 	}
 }
 
+func route(admin, remote http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := hostName(r.Host)
+
+		if config.IsAdminHost(host) {
+			// log.Printf("admin request: %s", host)
+			admin.ServeHTTP(w, r)
+			return
+		}
+
+		if config.IsTargetHost(host) {
+			// log.Printf("remote request: %s", host)
+			remote.ServeHTTP(w, r)
+			return
+		}
+
+		// 未匹配到管理域名或目标应用域名的流量直接忽略。
+		log.Printf("[Gater] 忽略未匹配域名请求: host=%s method=%s path=%s", host, r.Method, r.URL.Path)
+		// Not available for this host, return 404 Not Found.
+		http.NotFound(w, r)
+	})
+}
+
 // serverCtx 在 manager.Manager 基础上注入运行时配置，
 // 满足 api.appManager 接口的 AppSuffixes() 和 ServerConfig() 方法。
 type serverCtx struct {
@@ -63,26 +86,6 @@ func (s *serverCtx) ServerConfig() api.ServerConfig {
 		AppSuffixes:  s.appSuffixes,
 		AppTemplates: config.DefaultAppTemplates,
 	}
-}
-
-func route(admin, remote http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := hostName(r.Host)
-
-		if config.IsAdminHost(host) {
-			admin.ServeHTTP(w, r)
-			return
-		}
-
-		if config.IsTargetHost(host) {
-			remote.ServeHTTP(w, r)
-			return
-		}
-
-		// 未匹配到管理域名或目标应用域名的流量直接忽略。
-		log.Printf("[Gater] 忽略未匹配域名请求: host=%s method=%s path=%s", host, r.Method, r.URL.Path)
-		http.NotFound(w, r)
-	})
 }
 
 func hostName(host string) string {

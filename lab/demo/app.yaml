@@ -1,8 +1,8 @@
 name: demo
-domain_suffix: .l.h
+domain_suffix: .l
 cmd: "sh"
 args:
-- c
+- -c
 - python3 -m http.server ${PORT}
 env:
   LOG_LEVEL: debug

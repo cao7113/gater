@@ -31,7 +31,19 @@ var DefaultAppTemplates = []AppTemplate{
 			{Key: "SECRET_KEY_BASE", Value: "todo mix phx.gen.secret"},
 			{Key: "DATABASE_URL", Value: "postgres://postgres:postgres@localhost:5432/xxx_prod?sslmode=disable"},
 		},
-		IdleTimeout: "10m",
+		IdleTimeout: "5m",
+	},
+	{
+		ID:      "fs",
+		Label:   "File Server",
+		AppType: "fs",
+		// Cwd:     "/path/to/gater",
+		Cmd:  "caddy",
+		Args: []string{"file-server", "--browse", "--listen", ":${PORT}", "--root", "."},
+		Env: []EnvKV{
+			{Key: "PORT", Value: "${PORT}"},
+		},
+		IdleTimeout: "5m",
 	},
 	{
 		ID:      "bun",
@@ -42,14 +54,14 @@ var DefaultAppTemplates = []AppTemplate{
 		Env: []EnvKV{
 			{Key: "PORT", Value: "${PORT}"},
 		},
-		IdleTimeout: "15m",
+		IdleTimeout: "5m",
 	},
 	{
 		ID:      "python",
 		Label:   "Python HTTP",
 		AppType: "python",
 		Cmd:     "python3",
-		Args:    []string{"-m http.server ${PORT}"},
+		Args:    []string{"-m", "http.server", "${PORT}"},
 		Env: []EnvKV{
 			{Key: "PORT", Value: "${PORT}"},
 		},
