@@ -307,6 +307,39 @@ Alpine.data('dashboard', () => ({
     return picked;
   },
 
+  async pickDirectory(currentPath) {
+    const pickRes = await fetch('/api/fs/pick-directory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: currentPath || '' })
+    });
+    const picked = await pickRes.json();
+    if (picked.canceled) return null;
+    if (!pickRes.ok || !picked.path) {
+      this.showToast('选择工作目录失败', 'error');
+      return null;
+    }
+    return picked.path;
+  },
+
+  async pickRegisterDirectory() {
+    try {
+      const path = await this.pickDirectory(this.form.cwd);
+      if (path) this.form.cwd = path;
+    } catch (e) {
+      this.showToast('选择工作目录失败: ' + e.message, 'error');
+    }
+  },
+
+  async pickEditDirectory() {
+    try {
+      const path = await this.pickDirectory(this.editConfig.cwd);
+      if (path) this.editConfig.cwd = path;
+    } catch (e) {
+      this.showToast('选择工作目录失败: ' + e.message, 'error');
+    }
+  },
+
   async addYAML(path) {
     return fetch('/api/apps/from-yaml', {
       method: 'POST',
@@ -356,8 +389,8 @@ Alpine.data('dashboard', () => ({
     const cwd = this.form.cwd.trim();
     const cmd = this.form.cmd.trim();
 
-    if (!name || !cwd || !cmd) {
-      this.showToast('请填写所有必填字段', 'error');
+    if (!name || !cmd) {
+      this.showToast('请填写应用标识和启动命令', 'error');
       return;
     }
 

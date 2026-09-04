@@ -271,9 +271,19 @@
             </select>
           </div>
           <div class="form-control gap-1">
-            <label class="label py-1 text-xs font-semibold">工作目录（cwd）</label>
-            <input type="text" x-model="editConfig.cwd" class="input input-bordered input-md w-full font-mono"
-              required />
+            <label class="label py-1 text-xs font-semibold">工作目录（cwd，可选）</label>
+            <div class="join w-full">
+              <input type="text" x-model="editConfig.cwd" placeholder="留空则使用 Gater 当前目录"
+                class="input input-bordered input-md join-item w-full min-w-0 font-mono" />
+              <button type="button" @click="pickEditDirectory()" class="btn btn-outline btn-md join-item gap-1"
+                title="从文件系统选择工作目录">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path>
+                </svg>
+                <span>选择目录</span>
+              </button>
+            </div>
           </div>
           <div class="form-control gap-1">
             <label class="label py-1 text-xs font-semibold">启动命令（cmd）</label>
@@ -465,9 +475,19 @@
             </select>
           </div>
           <div class="form-control mb-3">
-            <label class="label text-xs font-semibold">工作目录（cwd）*</label>
-            <input type="text" x-model="form.cwd" placeholder="/Users/rj/projects/demo"
-              class="input input-bordered input-sm w-full min-w-0 font-mono" required />
+            <label class="label text-xs font-semibold">工作目录（cwd，可选）</label>
+            <div class="join w-full">
+              <input type="text" x-model="form.cwd" placeholder="留空则使用 Gater 当前目录"
+                class="input input-bordered input-sm join-item w-full min-w-0 font-mono" />
+              <button type="button" @click="pickRegisterDirectory()" class="btn btn-outline btn-sm join-item gap-1"
+                title="从文件系统选择工作目录">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 7a2 2 0 012-2h5l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path>
+                </svg>
+                <span>选择目录</span>
+              </button>
+            </div>
           </div>
           <div class="form-control mb-3">
             <label class="label text-xs font-semibold">启动命令（cmd）*</label>

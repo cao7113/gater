@@ -154,8 +154,11 @@ func (a *App) Run(ctx context.Context) error {
 // startAppLocked 具体的启动核心逻辑（必须在持有 a.mu 的情况下调用）
 func (a *App) startAppLocked(ctx context.Context) error {
 	// 1. 检查运行环境与命令路径
-	if fi, err := os.Stat(a.Config.Cwd); err != nil || !fi.IsDir() {
-		return fmt.Errorf("应用工作目录不存在: %s", a.Config.Cwd)
+	// 空 cwd 表示继承 Gater 的当前工作目录；填写 cwd 时才校验目录。
+	if a.Config.Cwd != "" {
+		if fi, err := os.Stat(a.Config.Cwd); err != nil || !fi.IsDir() {
+			return fmt.Errorf("应用工作目录不存在: %s", a.Config.Cwd)
+		}
 	}
 	if _, err := exec.LookPath(a.Config.Cmd); err != nil {
 		return fmt.Errorf("未找到启动命令 [%s]，请确认是否已安装或检查 PATH 环境变量", a.Config.Cmd)

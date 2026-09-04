@@ -17,12 +17,9 @@
 - 访问admin 的页面
   - 查看应用列表，运行状态，距离关闭还有多久，查看运行log
 
-## DNS resolver
+## Todo
 
-todo
-
-- dnsmasq + caddy
-- dig coredns
+- 
 
 ## AppType Handler
 

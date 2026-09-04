@@ -95,9 +95,6 @@ func Validate(cfg AppConfig) error {
 	if cfg.Name == "" {
 		return fmt.Errorf("缺少 name")
 	}
-	if strings.TrimSpace(cfg.Cwd) == "" {
-		return fmt.Errorf("缺少 cwd")
-	}
 	if cfg.Cmd == "" {
 		return fmt.Errorf("缺少 cmd")
 	}

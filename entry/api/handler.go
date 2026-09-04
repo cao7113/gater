@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -39,6 +40,44 @@ func (h *handler) pickYAMLFile(w http.ResponseWriter, _ *http.Request) {
 		response["config"] = cfg
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *handler) pickDirectory(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Path string `json:"path"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&request)
+
+	// 只有当前值确实是目录时才作为默认位置，避免 macOS 选择器因无效路径报错。
+	defaultLocation := ""
+	path := strings.TrimSpace(request.Path)
+	if filepath.IsAbs(path) {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			defaultLocation = ` default location POSIX file "` + appleScriptEscape(path) + `"`
+		}
+	}
+	script := `POSIX path of (choose folder with prompt "请选择工作目录"` + defaultLocation + `)`
+	output, err := exec.Command("osascript", "-e", script).Output()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"canceled": true})
+		return
+	}
+
+	selectedPath := strings.TrimSpace(string(output))
+	if selectedPath == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"canceled": true})
+		return
+	}
+	selectedPath = strings.TrimRight(selectedPath, "/")
+	if selectedPath == "" {
+		selectedPath = "/"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"canceled": false, "path": selectedPath})
+}
+
+func appleScriptEscape(value string) string {
+	value = strings.ReplaceAll(value, `\`, `\\`)
+	return strings.ReplaceAll(value, `"`, `\"`)
 }
 
 func (h *handler) nextPort(w http.ResponseWriter, _ *http.Request) {
