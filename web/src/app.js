@@ -34,6 +34,7 @@ Alpine.data('dashboard', () => ({
   appSuffixes: [],
   app_templates: [],
   serverVersion: 'dev',
+  searchQuery: '',
   form: {
     name: '',
     domain_suffix: '',
@@ -120,6 +121,15 @@ Alpine.data('dashboard', () => ({
     } catch (e) {
       return '';
     }
+  },
+
+  filteredApps() {
+    const query = (this.searchQuery || '').trim().toLowerCase();
+    if (!query) return this.apps;
+    return this.apps.filter(app => {
+      const haystack = [app.name, ...(app.aliases || [])].join(' ').toLowerCase();
+      return haystack.includes(query) || (app.url || '').toLowerCase().includes(query);
+    });
   },
 
   isLoading(name) {

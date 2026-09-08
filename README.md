@@ -2,6 +2,8 @@
 
 Gater 是一个面向 macOS 本地环境的按需启动反向代理。它把已注册的应用映射到指定的域名，如`demo.s`，第一次访问时才启动应用，应用空闲后自动停止。
 
+![alt text](docs/index.png)
+
 ## 启动模型
 
 1. `gater` 启动时创建 Store 和 Manager，从 `~/.config/gater/store.yaml` 恢复已注册应用；恢复只创建内存实例，不会拉起子进程
