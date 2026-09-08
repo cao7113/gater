@@ -66,6 +66,8 @@ func run(c *client, command string, args []string) error {
 		return c.list()
 	case "aliases", "alias":
 		return c.aliases(args)
+	case "names":
+		return c.names(args)
 	case "config":
 		if len(args) != 0 {
 			return errors.New("config 不接受参数")
@@ -111,6 +113,14 @@ func (c *client) list() error {
 	return nil
 }
 
+type nameEntry struct {
+	Value   string
+	Name    string
+	URL     string
+	Source  string
+	Matches bool
+}
+
 func (c *client) aliases(args []string) error {
 	if len(args) > 2 || (len(args) == 2 && args[0] != "search") {
 		return errors.New("用法: gater-client aliases [search] [keyword]")
@@ -132,25 +142,88 @@ func (c *client) aliases(args []string) error {
 	if err := c.get("/api/apps", &apps); err != nil {
 		return err
 	}
-	found := false
-	fmt.Printf("%-24s %-24s %s\n", "ALIAS", "NAME", "URL")
-	for _, app := range apps {
-		for _, alias := range app.Aliases {
-			if keyword != "" && !strings.Contains(strings.ToLower(alias), keyword) && !strings.Contains(strings.ToLower(app.Name), keyword) {
-				continue
-			}
-			fmt.Printf("%-24s %-24s %s\n", alias, app.Name, aliasURL(app, alias))
-			found = true
-		}
+	entries := buildNamesList(apps)
+	if keyword != "" {
+		entries = filterNames(entries, keyword)
 	}
-	if !found {
+	if len(entries) == 0 {
 		if keyword == "" {
 			fmt.Println("没有已注册的别名")
 		} else {
-			fmt.Printf("没有匹配 %q 的别名\n", keyword)
+			fmt.Printf("没有匹配 %q 的名称或别名\n", keyword)
 		}
+		return nil
+	}
+	fmt.Printf("%-24s %-24s %s\n", "NAME", "APP", "URL")
+	for _, entry := range entries {
+		fmt.Printf("%-24s %-24s %s\n", entry.Value, entry.Name, entry.URL)
 	}
 	return nil
+}
+
+func (c *client) names(args []string) error {
+	if len(args) > 2 || (len(args) == 2 && args[0] != "search") {
+		return errors.New("用法: gater-client names [search] [keyword]")
+	}
+	keyword := ""
+	if len(args) == 1 {
+		if args[0] == "search" {
+			return errors.New("用法: gater-client names search <keyword>")
+		}
+		keyword = strings.ToLower(strings.TrimSpace(args[0]))
+	} else if len(args) == 2 {
+		keyword = strings.ToLower(strings.TrimSpace(args[1]))
+		if keyword == "" {
+			return errors.New("搜索关键词不能为空")
+		}
+	}
+
+	var apps []api.AppInfo
+	if err := c.get("/api/apps", &apps); err != nil {
+		return err
+	}
+	entries := buildNamesList(apps)
+	if keyword != "" {
+		entries = filterNames(entries, keyword)
+	}
+	if len(entries) == 0 {
+		if keyword == "" {
+			fmt.Println("没有已注册的名称或别名")
+		} else {
+			fmt.Printf("没有匹配 %q 的名称或别名\n", keyword)
+		}
+		return nil
+	}
+	fmt.Printf("%-24s %-24s %s\n", "NAME", "APP", "URL")
+	for _, entry := range entries {
+		fmt.Printf("%-24s %-24s %s\n", entry.Value, entry.Name, entry.URL)
+	}
+	return nil
+}
+
+func buildNamesList(apps []api.AppInfo) []nameEntry {
+	res := make([]nameEntry, 0, len(apps))
+	for _, app := range apps {
+		res = append(res, nameEntry{Value: app.Name, Name: app.Name, URL: app.URL, Source: "name"})
+		for _, alias := range app.Aliases {
+			res = append(res, nameEntry{Value: alias, Name: app.Name, URL: aliasURL(app, alias), Source: "alias"})
+		}
+	}
+	return res
+}
+
+func filterNames(entries []nameEntry, keyword string) []nameEntry {
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+	if keyword == "" {
+		return entries
+	}
+	filtered := make([]nameEntry, 0, len(entries))
+	for _, entry := range entries {
+		if strings.Contains(strings.ToLower(entry.Value), keyword) || strings.Contains(strings.ToLower(entry.Name), keyword) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func aliasURL(app api.AppInfo, alias string) string {
@@ -365,6 +438,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "\n命令:")
 	fmt.Fprintln(os.Stderr, "  list              列出所有应用")
 	fmt.Fprintln(os.Stderr, "  aliases [keyword] 查看或搜索所有应用别名")
+	fmt.Fprintln(os.Stderr, "  names [keyword]   查看或搜索所有应用名称与别名")
 	fmt.Fprintln(os.Stderr, "  config            显示 store 配置")
 	fmt.Fprintln(os.Stderr, "  next-port         获取一个可用的本地应用端口")
 	fmt.Fprintln(os.Stderr, "  show <app>        查看应用配置与状态")
