@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 
 	"github.com/cao7113/gater/internal/app"
@@ -20,6 +21,7 @@ type Manager struct {
 	store           *store.Store
 	ctx             context.Context
 	allowedSuffixes []config.AppSuffix
+	names           map[string]string
 }
 
 func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *Manager {
@@ -32,6 +34,7 @@ func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *
 		store:           st,
 		ctx:             ctx,
 		allowedSuffixes: allowedSuffixes,
+		names:           make(map[string]string),
 	}
 
 	// 从持久化存储恢复应用
@@ -40,7 +43,11 @@ func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *
 			ac.DomainSuffix = allowedSuffixes[0].Suffix
 			_ = st.Save(ac)
 		}
-		m.registerInstance(ac)
+		instance := m.registerInstance(ac)
+		if err := m.addNames(ac); err != nil {
+			log.Printf("[Gater] 应用名称或别名冲突，无法建立别名索引: %s: %v", ac.Name, err)
+			instance.Config.Aliases = nil
+		}
 	}
 
 	return m
@@ -65,8 +72,8 @@ func (m *Manager) RegisterApp(ac config.AppConfig) error {
 		return fmt.Errorf("应用配置无效: %w", err)
 	}
 
-	if _, ok := m.apps[ac.Name]; ok {
-		return fmt.Errorf("%w: [%s]，请使用修改接口", ErrAppExists, ac.Name)
+	if err := m.validateNames(ac, ""); err != nil {
+		return err
 	}
 
 	if err := m.store.Save(ac); err != nil {
@@ -74,6 +81,9 @@ func (m *Manager) RegisterApp(ac config.AppConfig) error {
 	}
 
 	m.registerInstance(ac)
+	if err := m.addNames(ac); err != nil {
+		return err
+	}
 	log.Printf("[Gater] 注册应用成功: %s -> %s", ac.Name, ac.Cwd)
 	return nil
 }
@@ -82,22 +92,30 @@ func (m *Manager) UpdateApp(name string, cfg config.AppConfig) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, ok := m.apps[name]; !ok {
+	canonical, ok := m.names[normalizeName(name)]
+	if !ok {
 		return fmt.Errorf("应用 [%s] 不存在", name)
 	}
-	cfg.Name = name
+	cfg.Name = canonical
 	if err := config.Validate(cfg); err != nil {
 		return fmt.Errorf("应用配置无效: %w", err)
 	}
 	if err := config.ValidateDomainSuffix(cfg.DomainSuffix, m.allowedSuffixes); err != nil {
 		return fmt.Errorf("应用配置无效: %w", err)
 	}
-	m.apps[name].Stop()
+	if err := m.validateNames(cfg, canonical); err != nil {
+		return err
+	}
+	m.apps[canonical].Stop()
 	if err := m.store.Save(cfg); err != nil {
 		return err
 	}
+	m.removeNames(canonical)
 	m.registerInstance(cfg)
-	log.Printf("[Gater] 成功更新应用配置: %s", name)
+	if err := m.addNames(cfg); err != nil {
+		return err
+	}
+	log.Printf("[Gater] 成功更新应用配置: %s", canonical)
 	return nil
 }
 
@@ -112,7 +130,11 @@ func (m *Manager) registerInstance(ac config.AppConfig) *app.App {
 func (m *Manager) GetApp(name string) (*app.App, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	a, ok := m.apps[name]
+	canonical, ok := m.names[normalizeName(name)]
+	if !ok {
+		return nil, false
+	}
+	a, ok := m.apps[canonical]
 	return a, ok
 }
 
@@ -130,12 +152,68 @@ func (m *Manager) RemoveApp(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if instance, ok := m.apps[name]; ok {
-		instance.Stop()
-		delete(m.apps, name)
+	canonical, ok := m.names[normalizeName(name)]
+	if !ok {
+		return nil
 	}
+	if instance, ok := m.apps[canonical]; ok {
+		instance.Stop()
+		delete(m.apps, canonical)
+	}
+	m.removeNames(canonical)
 
-	return m.store.Delete(name)
+	return m.store.Delete(canonical)
+}
+
+func normalizeName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func (m *Manager) validateNames(ac config.AppConfig, current string) error {
+	seen := make(map[string]struct{}, len(ac.Aliases)+1)
+	check := func(value string) error {
+		name := normalizeName(value)
+		if name == "" {
+			return fmt.Errorf("应用配置无效: name 或 alias 不能为空")
+		}
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("应用名称或别名重复: [%s]", value)
+		}
+		seen[name] = struct{}{}
+		if owner, exists := m.names[name]; exists && owner != current {
+			return fmt.Errorf("%w: [%s]，名称或别名已被应用 [%s] 使用", ErrAppExists, value, owner)
+		}
+		return nil
+	}
+	if err := check(ac.Name); err != nil {
+		return err
+	}
+	for _, alias := range ac.Aliases {
+		if err := check(alias); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Manager) addNames(ac config.AppConfig) error {
+	if err := m.validateNames(ac, ""); err != nil {
+		return err
+	}
+	canonical := strings.TrimSpace(ac.Name)
+	m.names[normalizeName(canonical)] = canonical
+	for _, alias := range ac.Aliases {
+		m.names[normalizeName(alias)] = canonical
+	}
+	return nil
+}
+
+func (m *Manager) removeNames(canonical string) {
+	for name, owner := range m.names {
+		if owner == canonical {
+			delete(m.names, name)
+		}
+	}
 }
 
 func (m *Manager) StoreConfig() ([]byte, error) {

@@ -20,6 +20,7 @@ var TargetHost = DefaultTargetHost
 
 type AppConfig struct {
 	Name         string            `yaml:"name" json:"name"`
+	Aliases      []string          `yaml:"aliases,omitempty" json:"aliases,omitempty"`
 	DomainSuffix string            `yaml:"domain_suffix" json:"domain_suffix"`
 	AppType      string            `yaml:"app_type" json:"app_type"`
 	Cwd          string            `yaml:"cwd" json:"cwd"`

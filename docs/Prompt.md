@@ -17,9 +17,10 @@
 - 访问admin 的页面
   - 查看应用列表，运行状态，距离关闭还有多久，查看运行log
 
-## Todo
+## App aliases
 
-- 
+- 支持app name aliases, 如 livebook, aliases: lb, lv等
+- 添加和修改时要确保唯一不重复，如lb 只能 定位到livebook
 
 ## AppType Handler
 

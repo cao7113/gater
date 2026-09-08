@@ -64,6 +64,8 @@ func run(c *client, command string, args []string) error {
 			return errors.New("list 不接受参数")
 		}
 		return c.list()
+	case "aliases", "alias":
+		return c.aliases(args)
 	case "config":
 		if len(args) != 0 {
 			return errors.New("config 不接受参数")
@@ -107,6 +109,57 @@ func (c *client) list() error {
 		fmt.Printf("%-24s %-10s %-8d %s\n", app.Name, app.State, app.Port, app.Cwd)
 	}
 	return nil
+}
+
+func (c *client) aliases(args []string) error {
+	if len(args) > 2 || (len(args) == 2 && args[0] != "search") {
+		return errors.New("用法: gater-client aliases [search] [keyword]")
+	}
+	keyword := ""
+	if len(args) == 1 {
+		if args[0] == "search" {
+			return errors.New("用法: gater-client aliases search <keyword>")
+		}
+		keyword = strings.ToLower(strings.TrimSpace(args[0]))
+	} else if len(args) == 2 {
+		keyword = strings.ToLower(strings.TrimSpace(args[1]))
+		if keyword == "" {
+			return errors.New("搜索关键词不能为空")
+		}
+	}
+
+	var apps []api.AppInfo
+	if err := c.get("/api/apps", &apps); err != nil {
+		return err
+	}
+	found := false
+	fmt.Printf("%-24s %-24s %s\n", "ALIAS", "NAME", "URL")
+	for _, app := range apps {
+		for _, alias := range app.Aliases {
+			if keyword != "" && !strings.Contains(strings.ToLower(alias), keyword) && !strings.Contains(strings.ToLower(app.Name), keyword) {
+				continue
+			}
+			fmt.Printf("%-24s %-24s %s\n", alias, app.Name, aliasURL(app, alias))
+			found = true
+		}
+	}
+	if !found {
+		if keyword == "" {
+			fmt.Println("没有已注册的别名")
+		} else {
+			fmt.Printf("没有匹配 %q 的别名\n", keyword)
+		}
+	}
+	return nil
+}
+
+func aliasURL(app api.AppInfo, alias string) string {
+	target, err := url.Parse(app.URL)
+	if err != nil || target.Scheme == "" {
+		return ""
+	}
+	target.Host = alias + app.DomainSuffix
+	return target.String()
 }
 
 func (c *client) config() error {
@@ -311,6 +364,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "用法: gater [-addr URL] <command> [app]")
 	fmt.Fprintln(os.Stderr, "\n命令:")
 	fmt.Fprintln(os.Stderr, "  list              列出所有应用")
+	fmt.Fprintln(os.Stderr, "  aliases [keyword] 查看或搜索所有应用别名")
 	fmt.Fprintln(os.Stderr, "  config            显示 store 配置")
 	fmt.Fprintln(os.Stderr, "  next-port         获取一个可用的本地应用端口")
 	fmt.Fprintln(os.Stderr, "  show <app>        查看应用配置与状态")

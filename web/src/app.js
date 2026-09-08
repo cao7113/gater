@@ -26,8 +26,9 @@ Alpine.data('dashboard', () => ({
   configYaml: '',
   configShell: '',
   runtimeData: null,
-  editConfig: { name: '', app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
+  editConfig: { name: '', aliases: [], app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
   registerArgs: [],
+  registerAliases: [],
   envEntries: [],
   registerEnvEntries: [],
   appSuffixes: [],
@@ -110,6 +111,17 @@ Alpine.data('dashboard', () => ({
     return this.apps.find(app => app.name === name)?.url || '';
   },
 
+  getAliasURL(app, alias) {
+    if (!app?.url || !alias || !app.domain_suffix) return '';
+    try {
+      const target = new URL(app.url);
+      target.hostname = alias + app.domain_suffix;
+      return target.toString();
+    } catch (e) {
+      return '';
+    }
+  },
+
   isLoading(name) {
     return !!(this.actionLoading && this.actionLoading[name]);
   },
@@ -132,6 +144,7 @@ Alpine.data('dashboard', () => ({
     this.configShell = '';
     this.editConfig = {
       name: app.name,
+      aliases: [...(app.aliases || [])],
       domain_suffix: app.domain_suffix || this.appSuffixes[0]?.suffix || '',
       app_type: app.app_type || '',
       cwd: app.cwd,
@@ -165,6 +178,14 @@ Alpine.data('dashboard', () => ({
     this.envEntries.splice(index, 1);
   },
 
+  addAlias(target) {
+    target.push('');
+  },
+
+  removeAlias(target, index) {
+    target.splice(index, 1);
+  },
+
   addRegisterEnvEntry() {
     this.registerEnvEntries.push({ key: '', value: '' });
   },
@@ -189,6 +210,7 @@ Alpine.data('dashboard', () => ({
     }
     const payload = {
       name: this.editConfig.name,
+      aliases: this.editConfig.aliases.map(alias => alias.trim()).filter(Boolean),
       domain_suffix: this.editConfig.domain_suffix,
       app_type: this.editConfig.app_type.trim(),
       cwd: this.editConfig.cwd.trim(),
@@ -396,6 +418,7 @@ Alpine.data('dashboard', () => ({
 
     const payload = {
       name: name,
+      aliases: this.registerAliases.map(alias => alias.trim()).filter(Boolean),
       domain_suffix: this.form.domain_suffix,
       app_type: this.form.app_type.trim(),
       cwd,
@@ -429,6 +452,7 @@ Alpine.data('dashboard', () => ({
       this.showToast(`应用 [${name}] 注册成功`, 'success');
       this.form = { name: '', cwd: '', app_type: '', cmd: '', idle_timeout: '5m', port: '' };
       this.registerArgs = [];
+      this.registerAliases = [];
       this.registerEnvEntries = [];
       this.closeAddModal();
       await this.fetchApps();

@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -145,5 +146,58 @@ func TestAddOrUpdateAppRequiresYAMLPath(t *testing.T) {
 	mgr := New(context.Background(), st)
 	if err := mgr.AddOrUpdateApp(appDir); err == nil {
 		t.Fatal("directory path was accepted as app.yaml")
+	}
+}
+
+func TestAliasesUseUnifiedNamesIndex(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "store.yaml")
+	st, err := store.NewStore(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := New(context.Background(), st)
+
+	if err := mgr.RegisterApp(config.AppConfig{
+		Name: "livebook", Aliases: []string{"lb", "lv"}, DomainSuffix: ".l", Cwd: "/tmp", Cmd: "echo", IdleTimeout: "5m",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"livebook", "lb", "LV"} {
+		if application, ok := mgr.GetApp(name); !ok || application.Config.Name != "livebook" {
+			t.Fatalf("GetApp(%q) did not resolve canonical app: %#v, %v", name, application, ok)
+		}
+	}
+
+	err = mgr.RegisterApp(config.AppConfig{Name: "other", Aliases: []string{"LB"}, DomainSuffix: ".l", Cwd: "/tmp", Cmd: "echo", IdleTimeout: "5m"})
+	if !errors.Is(err, ErrAppExists) {
+		t.Fatalf("expected alias conflict, got %v", err)
+	}
+
+	if err := mgr.UpdateApp("lb", config.AppConfig{
+		Aliases: []string{"book"}, DomainSuffix: ".l", Cwd: "/tmp", Cmd: "echo", IdleTimeout: "5m",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := mgr.GetApp("lb"); ok {
+		t.Fatal("old alias remained after update")
+	}
+	if application, ok := mgr.GetApp("book"); !ok || application.Config.Name != "livebook" {
+		t.Fatal("new alias did not resolve after update")
+	}
+
+	if err := mgr.RemoveApp("book"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := mgr.GetApp("livebook"); ok {
+		t.Fatal("canonical name remained after removal")
+	}
+
+	st, err = store.NewStore(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr = New(context.Background(), st)
+	if _, ok := mgr.GetApp("book"); ok {
+		t.Fatal("removed alias was restored from store")
 	}
 }

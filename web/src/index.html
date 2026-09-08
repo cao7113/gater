@@ -82,6 +82,14 @@
                 </h2>
                 <p class="text-xs text-base-content/50 font-mono mt-1 truncate max-w-xs" :title="app.path"
                   x-text="app.path"></p>
+                <p x-show="app.aliases && app.aliases.length" class="text-xs text-base-content/60 mt-1">
+                  别名：
+                  <template x-for="alias in (app.aliases || [])" :key="alias">
+                    <a :href="getAliasURL(app, alias)" target="_blank"
+                      class="link link-hover link-secondary font-mono mr-2" :title="'访问 ' + getAliasURL(app, alias)"
+                      x-text="alias"></a>
+                  </template>
+                </p>
               </div>
 
               <!-- 状态徽章 (使用 x-show 确保 DOM 稳定) -->
@@ -269,6 +277,22 @@
                 </option>
               </template>
             </select>
+          </div>
+          <div class="form-control">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">应用别名（aliases）</label>
+              <button type="button" @click="addAlias(editConfig.aliases)" class="btn btn-ghost btn-xs">+ 添加别名</button>
+            </div>
+            <div class="space-y-1">
+              <template x-for="(alias, index) in editConfig.aliases" :key="index">
+                <div class="join w-full">
+                  <input type="text" x-model="editConfig.aliases[index]"
+                    class="input input-bordered input-sm join-item w-full font-mono" placeholder="例如 lb" />
+                  <button type="button" @click="removeAlias(editConfig.aliases, index)"
+                    class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
           </div>
           <div class="form-control gap-1">
             <label class="label py-1 text-xs font-semibold">工作目录（cwd，可选）</label>
@@ -473,6 +497,22 @@
               <option value="python">Python</option>
               <option value="bun">Bun</option>
             </select>
+          </div>
+          <div class="form-control mb-3">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">应用别名（aliases）</label>
+              <button type="button" @click="addAlias(registerAliases)" class="btn btn-ghost btn-xs">+ 添加别名</button>
+            </div>
+            <div class="space-y-1">
+              <template x-for="(alias, index) in registerAliases" :key="index">
+                <div class="join w-full">
+                  <input type="text" x-model="registerAliases[index]"
+                    class="input input-bordered input-sm join-item w-full font-mono" placeholder="例如 lb" />
+                  <button type="button" @click="removeAlias(registerAliases, index)"
+                    class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
           </div>
           <div class="form-control mb-3">
             <label class="label text-xs font-semibold">工作目录（cwd，可选）</label>

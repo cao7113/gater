@@ -322,6 +322,7 @@ func appToInfo(a *app.App) AppInfo {
 	}
 	return AppInfo{
 		Name:             a.Config.Name,
+		Aliases:          a.Config.Aliases,
 		DomainSuffix:     a.Config.DomainSuffix,
 		URL:              a.URL(),
 		AppType:          a.Config.AppType,
