@@ -17,6 +17,18 @@
 - 访问admin 的页面
   - 查看应用列表，运行状态，距离关闭还有多久，查看运行log
 
+## 多端口问题 如 livebook
+
+livebook.s -> main $port
+livebook-iframe.s -> iframe $port 
+
+我的需求和问题：
+live book是个phoenix项目，内部有两个端口
+PORT -> 动态生成的， 对应https://livebook.s
+IFRAME_PORT -> 另一个端口，如何动态指定， 想要访问 https://livebook-iframe.s时 访问同一个livebook 应用，但代理到 这个 IFRAME_PORT 端口
+
+如何实现，先在现有架构上讨论方案
+
 ## App Env Context
 
 ```
