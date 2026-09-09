@@ -65,7 +65,7 @@ func main() {
 		<-signals
 		signal.Stop(signals)
 
-		log.Println("[Gater Daemon] 接收到退出信号，优雅销毁所有子进程组...")
+		log.Println("[Gater Agent] 接收到退出信号，优雅销毁所有子进程组...")
 		cancel()
 		for _, application := range mgr.GetAllApps() {
 			application.Stop()

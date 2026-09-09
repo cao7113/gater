@@ -20,7 +20,7 @@ tasks:
   rel: |
     task gen
     task b
-    lctl reup lab.gater
+    lctl down lab.gater
     lctl up lab.gater
     
   rel.snapshot: |

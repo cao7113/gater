@@ -96,6 +96,39 @@ func TestGetConfig(t *testing.T) {
 	// }
 }
 
+func TestGetRuntimeRedactsSensitiveEnvironment(t *testing.T) {
+	t.Setenv("GATER_DOCTOR_TEST_VALUE", "visible")
+	t.Setenv("GATER_DOCTOR_TEST_TOKEN", "secret")
+
+	res := httptest.NewRecorder()
+	(&handler{mgr: newFakeMgr()}).getRuntime(res, httptest.NewRequest(http.MethodGet, "/api/runtime", nil))
+	if res.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", res.Code)
+	}
+
+	body := res.Body.Bytes()
+	var info RuntimeInfo
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&info); err != nil {
+		t.Fatalf("decode RuntimeInfo error: %v", err)
+	}
+	var response map[string]json.RawMessage
+	if err := json.Unmarshal(body, &response); err != nil {
+		t.Fatalf("decode runtime response error: %v", err)
+	}
+	if _, ok := response["config"]; ok {
+		t.Fatal("runtime response should not include config")
+	}
+	if info.PID <= 0 || info.Runtime.GoVersion == "" || info.Runtime.OS == "" || info.Runtime.Arch == "" {
+		t.Fatalf("missing process runtime information: %+v", info)
+	}
+	if got := info.Environment["GATER_DOCTOR_TEST_VALUE"]; !got.Set || got.Value != "visible" || got.Redacted {
+		t.Fatalf("unexpected non-sensitive environment value: %+v", got)
+	}
+	if got := info.Environment["GATER_DOCTOR_TEST_TOKEN"]; !got.Set || !got.Redacted || got.Value != "" {
+		t.Fatalf("sensitive environment value was not redacted: %+v", got)
+	}
+}
+
 func TestNextPort(t *testing.T) {
 	res := httptest.NewRecorder()
 	(&handler{mgr: newFakeMgr()}).nextPort(res, httptest.NewRequest(http.MethodPost, "/api/next-port", nil))

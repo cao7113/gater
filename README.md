@@ -27,7 +27,7 @@ Gater 是一个面向 macOS 本地环境的按需启动反向代理。它会将�
 ## 安装与使用
 
 - 通过 `mise + GitHub` 安装到本地
-- 参考 `lab/agent.plist` 安装为 Launchd Daemon 服务
+- 参考 `lab/agent.plist` 安装为 `Launchd Agent` 服务
 
 ### 前置条件
 

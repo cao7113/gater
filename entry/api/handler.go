@@ -9,8 +9,11 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -112,6 +115,68 @@ func (h *handler) getStoreConfig(w http.ResponseWriter, _ *http.Request) {
 
 func (h *handler) getConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, h.mgr.ServerConfig())
+}
+
+func (h *handler) getRuntime(w http.ResponseWriter, _ *http.Request) {
+	info := RuntimeInfo{
+		PID:  os.Getpid(),
+		PPID: os.Getppid(),
+		Args: append([]string(nil), os.Args[1:]...),
+		Runtime: RuntimeEnvironment{
+			GoVersion: runtime.Version(),
+			OS:        runtime.GOOS,
+			Arch:      runtime.GOARCH,
+			CPUs:      runtime.NumCPU(),
+		},
+		Environment: runtimeEnvironment(),
+	}
+	if executable, err := os.Executable(); err == nil {
+		info.Executable = executable
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		info.CWD = cwd
+	}
+	if currentUser, err := user.Current(); err == nil {
+		info.User = currentUser.Username
+		info.UID = currentUser.Uid
+		info.GID = currentUser.Gid
+	} else {
+		info.UID = strconv.Itoa(os.Getuid())
+		info.GID = strconv.Itoa(os.Getgid())
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
+func runtimeEnvironment() map[string]EnvValue {
+	environment := make(map[string]EnvValue)
+	for _, item := range os.Environ() {
+		name, value, found := strings.Cut(item, "=")
+		if !found {
+			continue
+		}
+		environment[name] = EnvValue{Set: true, Value: redactEnvironmentValue(name, value)}
+		if isSensitiveEnvironmentName(name) {
+			environment[name] = EnvValue{Set: true, Redacted: true}
+		}
+	}
+	return environment
+}
+
+func redactEnvironmentValue(name, value string) string {
+	if isSensitiveEnvironmentName(name) {
+		return ""
+	}
+	return value
+}
+
+func isSensitiveEnvironmentName(name string) bool {
+	name = strings.ToUpper(name)
+	for _, word := range []string{"TOKEN", "SECRET", "PASSWORD", "PASS", "KEY", "COOKIE", "AUTH", "CREDENTIAL", "PRIVATE"} {
+		if strings.Contains(name, word) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *handler) fromYAML(w http.ResponseWriter, r *http.Request) {

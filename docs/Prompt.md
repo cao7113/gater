@@ -17,6 +17,22 @@
 - 访问admin 的页面
   - 查看应用列表，运行状态，距离关闭还有多久，查看运行log
 
+## App Env Context
+
+```
+launchd plist
+  提供 HOME、PATH、mise shims、基础工具路径
+        ↓
+gater
+  继承并复制这些环境
+        ↓
+app.yaml
+  覆盖应用专属环境和启动参数
+        ↓
+项目 .mise.toml / .tool-versions
+  决定 Elixir、Erlang、Node 等具体版本
+```
+
 ## App aliases
 
 - 支持app name aliases, 如 livebook, aliases: lb, lv等

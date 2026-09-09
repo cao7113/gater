@@ -13,6 +13,7 @@ func NewHandler(mgr appManager) http.Handler {
 
 	// Server and store configuration.
 	mux.HandleFunc("GET /api/config", h.getConfig)
+	mux.HandleFunc("GET /api/runtime", h.getRuntime)
 	mux.HandleFunc("GET /api/store/config", h.getStoreConfig)
 	mux.HandleFunc("POST /api/next-port", h.nextPort)
 

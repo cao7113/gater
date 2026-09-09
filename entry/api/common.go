@@ -48,3 +48,29 @@ type ServerConfig struct {
 	AppSuffixes  []config.AppSuffix   `json:"app_suffixes"`
 	AppTemplates []config.AppTemplate `json:"app_templates"`
 }
+
+type RuntimeInfo struct {
+	PID         int                 `json:"pid"`
+	PPID        int                 `json:"ppid"`
+	User        string              `json:"user,omitempty"`
+	UID         string              `json:"uid,omitempty"`
+	GID         string              `json:"gid,omitempty"`
+	Executable  string              `json:"executable,omitempty"`
+	Args        []string            `json:"args"`
+	CWD         string              `json:"cwd,omitempty"`
+	Runtime     RuntimeEnvironment  `json:"runtime"`
+	Environment map[string]EnvValue `json:"environment"`
+}
+
+type RuntimeEnvironment struct {
+	GoVersion string `json:"go_version"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+	CPUs      int    `json:"cpus"`
+}
+
+type EnvValue struct {
+	Set      bool   `json:"set"`
+	Value    string `json:"value,omitempty"`
+	Redacted bool   `json:"redacted,omitempty"`
+}

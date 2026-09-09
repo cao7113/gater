@@ -21,6 +21,16 @@
     <key>KeepAlive</key>
     <true/>
 
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- 将 ~/.local/bin 和 ~/.local/share/mise/shims 加入 PATH -->
+        <!-- 注意：plist 中不支持用 ~ 简写，必须写绝对路径 /Users/你的用户名 -->
+        <key>PATH</key>
+        <string>/Users/rj/.local/bin:/Users/rj/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>MISE_CONFIG_DIR</key>
+        <string>/Users/rj/nix-mac/mise</string>
+    </dict>
+
     <key>StandardOutPath</key>
     <string>/tmp/gater.log</string>
     <key>StandardErrorPath</key>

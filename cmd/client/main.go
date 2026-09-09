@@ -49,7 +49,7 @@ func main() {
 		fatal(err)
 	}
 
-	fmt.Println("# Connect to server:", baseURL)
+	fmt.Fprintln(os.Stderr, "# Connect to server:", baseURL)
 	c := &client{baseURL: baseURL, httpClient: http.DefaultClient}
 
 	if err := run(c, args[0], args[1:]); err != nil {
@@ -73,6 +73,11 @@ func run(c *client, command string, args []string) error {
 			return errors.New("config 不接受参数")
 		}
 		return c.config()
+	case "doctor":
+		if len(args) != 0 {
+			return errors.New("doctor 不接受参数")
+		}
+		return c.doctor()
 	case "next-port":
 		if len(args) != 0 {
 			return errors.New("next-port 不接受参数")
@@ -242,6 +247,14 @@ func (c *client) config() error {
 	}
 	_, err = fmt.Print(content)
 	return err
+}
+
+func (c *client) doctor() error {
+	var runtime map[string]any
+	if err := c.get("/api/runtime", &runtime); err != nil {
+		return err
+	}
+	return printJSON(runtime)
 }
 
 func (c *client) nextPort() error {
@@ -440,6 +453,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  aliases [keyword] 查看或搜索所有应用别名")
 	fmt.Fprintln(os.Stderr, "  names [keyword]   查看或搜索所有应用名称与别名")
 	fmt.Fprintln(os.Stderr, "  config            显示 store 配置")
+	fmt.Fprintln(os.Stderr, "  doctor            查看 Gater process/agent 运行环境")
 	fmt.Fprintln(os.Stderr, "  next-port         获取一个可用的本地应用端口")
 	fmt.Fprintln(os.Stderr, "  show <app>        查看应用配置与状态")
 	fmt.Fprintln(os.Stderr, "  runtime <app>     查看运行配置（默认脱敏；--show-sensitive 显示敏感值）")
