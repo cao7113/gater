@@ -35,19 +35,21 @@ const (
 )
 
 type App struct {
-	mu          sync.RWMutex
-	Config      config.AppConfig
-	Port        int
-	State       State
-	LastActive  time.Time
-	Timeout     time.Duration
-	Cmd         *exec.Cmd
-	processDone chan error
-	Pid         int
-	RuntimeEnv  map[string]string
-	StartedAt   *time.Time
+	mu            sync.RWMutex
+	Config        config.AppConfig
+	Port          int
+	EndpointPorts map[string]int
+	State         State
+	LastActive    time.Time
+	Timeout       time.Duration
+	Cmd           *exec.Cmd
+	processDone   chan error
+	Pid           int
+	RuntimeEnv    map[string]string
+	StartedAt     *time.Time
 
 	Proxy         *httputil.ReverseProxy
+	endpointProxy map[string]*httputil.ReverseProxy
 	LogBuf        *LogBuffer
 	StartupMs     int64
 	LastStartedAt *time.Time
@@ -77,30 +79,45 @@ func NewApp(ac config.AppConfig) *App {
 	}
 
 	application := &App{
-		Config:     ac,
-		Port:       DynamicPort,
-		State:      StateStopped,
-		Timeout:    timeout,
-		LastActive: time.Now(),
-		LogBuf:     NewLogBuffer(1000),
-		RuntimeEnv: make(map[string]string),
+		Config:        ac,
+		Port:          DynamicPort,
+		EndpointPorts: make(map[string]int),
+		State:         StateStopped,
+		Timeout:       timeout,
+		LastActive:    time.Now(),
+		LogBuf:        NewLogBuffer(1000),
+		RuntimeEnv:    make(map[string]string),
+		endpointProxy: make(map[string]*httputil.ReverseProxy),
 	}
 
-	// 2. 使用 Rewrite 并配置优雅的 ErrorHandler（防止 502/断连导致进程崩溃）
-	application.Proxy = &httputil.ReverseProxy{
-		Rewrite: func(r *httputil.ProxyRequest) {
+	// 主端口保持现有代理路径；额外 endpoint 只增加按端口选择的代理。
+	application.Proxy = application.newProxy(transport, func() int {
+		application.mu.RLock()
+		defer application.mu.RUnlock()
+		return application.Port
+	})
+	for _, endpoint := range ac.Endpoints {
+		entryName := strings.ToLower(strings.TrimSpace(endpoint.EntryName))
+		application.endpointProxy[entryName] = application.newProxy(transport, func() int {
 			application.mu.RLock()
-			port := application.Port
-			application.mu.RUnlock()
-			r.SetURL(&url.URL{Scheme: "http", Host: net.JoinHostPort(config.TargetHost, strconv.Itoa(port))})
-			// 透传真实请求 Header
-			r.Out.Header.Set("X-Forwarded-Host", r.In.Host)
-		},
-		Transport:    transport,
-		ErrorHandler: NewProxyErrorHandler(ac.Name), // 独立函数调用,
+			defer application.mu.RUnlock()
+			return application.EndpointPorts[entryName]
+		})
 	}
 
 	return application
+}
+
+func (a *App) newProxy(transport http.RoundTripper, port func() int) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			targetPort := port()
+			r.SetURL(&url.URL{Scheme: "http", Host: net.JoinHostPort(config.TargetHost, strconv.Itoa(targetPort))})
+			r.Out.Header.Set("X-Forwarded-Host", r.In.Host)
+		},
+		Transport:    transport,
+		ErrorHandler: NewProxyErrorHandler(a.Config.Name),
+	}
 }
 
 // ============================================================================
@@ -171,6 +188,13 @@ func (a *App) startAppLocked(ctx context.Context) error {
 			return err
 		}
 		a.Port = port
+	}
+	for _, endpoint := range a.Config.Endpoints {
+		port, err := NextPort()
+		if err != nil {
+			return fmt.Errorf("为 endpoint [%s] 分配端口失败: %w", endpoint.EntryName, err)
+		}
+		a.EndpointPorts[strings.ToLower(strings.TrimSpace(endpoint.EntryName))] = port
 	}
 
 	// 2. 构建类型上下文并执行启动前 Hook
@@ -286,6 +310,20 @@ func (a *App) GetState() State {
 // releasePortLocked 清理当前运行实例的端口，调用方必须持有 a.mu。
 func (a *App) releasePortLocked() {
 	a.Port = DynamicPort
+	clear(a.EndpointPorts)
+}
+
+func (a *App) ProxyEndpoint(w http.ResponseWriter, r *http.Request, entryName string) error {
+	name := strings.ToLower(strings.TrimSpace(entryName))
+	a.mu.RLock()
+	proxy, ok := a.endpointProxy[name]
+	port := a.EndpointPorts[name]
+	a.mu.RUnlock()
+	if !ok || port == DynamicPort {
+		return fmt.Errorf("endpoint [%s] 未配置或尚未就绪", entryName)
+	}
+	proxy.ServeHTTP(w, r)
+	return nil
 }
 
 // ============================================================================
@@ -324,21 +362,32 @@ func (a *App) waitForPortOrExit(ctx context.Context, processDone <-chan error) e
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	addr := net.JoinHostPort(config.TargetHost, strconv.Itoa(a.Port))
+	addresses := []string{net.JoinHostPort(config.TargetHost, strconv.Itoa(a.Port))}
+	for _, endpoint := range a.Config.Endpoints {
+		port := a.EndpointPorts[strings.ToLower(strings.TrimSpace(endpoint.EntryName))]
+		addresses = append(addresses, net.JoinHostPort(config.TargetHost, strconv.Itoa(port)))
+	}
 	dialTimeout := 300 * time.Millisecond
 
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			return fmt.Errorf("等待端口 %s 监听超时", addr)
+			return fmt.Errorf("等待应用端口监听超时: %v", addresses)
 
 		case err := <-processDone:
 			return fmt.Errorf("应用进程在启动就绪前已闪退退出: %v", err)
 
 		case <-ticker.C:
-			conn, err := net.DialTimeout("tcp", addr, dialTimeout)
-			if err == nil {
+			ready := true
+			for _, addr := range addresses {
+				conn, err := net.DialTimeout("tcp", addr, dialTimeout)
+				if err != nil {
+					ready = false
+					break
+				}
 				conn.Close()
+			}
+			if ready {
 				return nil
 			}
 		}
@@ -402,6 +451,10 @@ func (a *App) newAppTypeContext() *types.TypeContext {
 		"APP_DOMAIN": domain,
 		"PORT":       strconv.Itoa(a.Port),
 	}
+	for _, endpoint := range a.Config.Endpoints {
+		entryName := strings.ToLower(strings.TrimSpace(endpoint.EntryName))
+		ctxVars[endpoint.PortEnv] = strconv.Itoa(a.EndpointPorts[entryName])
+	}
 
 	// 读取系统环境变量
 	sysEnviron := os.Environ()
@@ -420,6 +473,10 @@ func (a *App) newAppTypeContext() *types.TypeContext {
 	// 复用本地 utils.go 中的 ExpandPlaceholders 展开 Config.Env 并写入 envMap
 	for k, v := range a.Config.Env {
 		envMap[k] = ExpandPlaceholders(v, ctxVars)
+	}
+	for _, endpoint := range a.Config.Endpoints {
+		entryName := strings.ToLower(strings.TrimSpace(endpoint.EntryName))
+		envMap[endpoint.PortEnv] = strconv.Itoa(a.EndpointPorts[entryName])
 	}
 
 	// 复用本地 utils.go 中的 ExpandSlice 展开 Config.Args

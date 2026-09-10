@@ -22,6 +22,12 @@ type Manager struct {
 	ctx             context.Context
 	allowedSuffixes []config.AppSuffix
 	names           map[string]string
+	entries         map[string]entryRef
+}
+
+type entryRef struct {
+	appName  string
+	endpoint string
 }
 
 func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *Manager {
@@ -35,6 +41,7 @@ func New(ctx context.Context, st *store.Store, suffixes ...[]config.AppSuffix) *
 		ctx:             ctx,
 		allowedSuffixes: allowedSuffixes,
 		names:           make(map[string]string),
+		entries:         make(map[string]entryRef),
 	}
 
 	// 从持久化存储恢复应用
@@ -119,6 +126,21 @@ func (m *Manager) UpdateApp(name string, cfg config.AppConfig) error {
 	return nil
 }
 
+func (m *Manager) GetEntry(name string) (*app.App, string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entry, ok := m.entries[normalizeName(name)]
+	if !ok {
+		return nil, "", false
+	}
+	a, ok := m.apps[entry.appName]
+	if !ok {
+		return nil, "", false
+	}
+	return a, entry.endpoint, true
+}
+
 func (m *Manager) registerInstance(ac config.AppConfig) *app.App {
 	instance := app.NewApp(ac)
 	m.apps[ac.Name] = instance
@@ -170,14 +192,14 @@ func normalizeName(name string) string {
 }
 
 func (m *Manager) validateNames(ac config.AppConfig, current string) error {
-	seen := make(map[string]struct{}, len(ac.Aliases)+1)
-	check := func(value string) error {
+	seen := make(map[string]struct{}, len(ac.Aliases)+len(ac.Endpoints)+1)
+	check := func(value, kind string) error {
 		name := normalizeName(value)
 		if name == "" {
-			return fmt.Errorf("应用配置无效: name 或 alias 不能为空")
+			return fmt.Errorf("应用配置无效: %s 不能为空", kind)
 		}
 		if _, exists := seen[name]; exists {
-			return fmt.Errorf("应用名称或别名重复: [%s]", value)
+			return fmt.Errorf("应用入口名称重复: [%s]", value)
 		}
 		seen[name] = struct{}{}
 		if owner, exists := m.names[name]; exists && owner != current {
@@ -185,11 +207,16 @@ func (m *Manager) validateNames(ac config.AppConfig, current string) error {
 		}
 		return nil
 	}
-	if err := check(ac.Name); err != nil {
+	if err := check(ac.Name, "name"); err != nil {
 		return err
 	}
 	for _, alias := range ac.Aliases {
-		if err := check(alias); err != nil {
+		if err := check(alias, "alias"); err != nil {
+			return err
+		}
+	}
+	for _, endpoint := range ac.Endpoints {
+		if err := check(endpoint.EntryName, "endpoint entry_name"); err != nil {
 			return err
 		}
 	}
@@ -202,8 +229,16 @@ func (m *Manager) addNames(ac config.AppConfig) error {
 	}
 	canonical := strings.TrimSpace(ac.Name)
 	m.names[normalizeName(canonical)] = canonical
+	m.entries[normalizeName(canonical)] = entryRef{appName: canonical}
 	for _, alias := range ac.Aliases {
-		m.names[normalizeName(alias)] = canonical
+		name := normalizeName(alias)
+		m.names[name] = canonical
+		m.entries[name] = entryRef{appName: canonical}
+	}
+	for _, endpoint := range ac.Endpoints {
+		name := normalizeName(endpoint.EntryName)
+		m.names[name] = canonical
+		m.entries[name] = entryRef{appName: canonical, endpoint: name}
 	}
 	return nil
 }
@@ -212,6 +247,7 @@ func (m *Manager) removeNames(canonical string) {
 	for name, owner := range m.names {
 		if owner == canonical {
 			delete(m.names, name)
+			delete(m.entries, name)
 		}
 	}
 }

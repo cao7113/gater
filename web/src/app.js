@@ -26,9 +26,10 @@ Alpine.data('dashboard', () => ({
   configYaml: '',
   configShell: '',
   runtimeData: null,
-  editConfig: { name: '', aliases: [], app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
+  editConfig: { name: '', aliases: [], endpoints: [], app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
   registerArgs: [],
   registerAliases: [],
+  registerEndpoints: [],
   envEntries: [],
   registerEnvEntries: [],
   appSuffixes: [],
@@ -123,11 +124,23 @@ Alpine.data('dashboard', () => ({
     }
   },
 
+  getEndpointURL(app, endpoint) {
+    if (!app?.url || !endpoint?.entry_name || !app.domain_suffix) return '';
+    try {
+      const target = new URL(app.url);
+      target.hostname = endpoint.entry_name.toLowerCase() + app.domain_suffix;
+      return target.toString();
+    } catch (e) {
+      return '';
+    }
+  },
+
   filteredApps() {
     const query = (this.searchQuery || '').trim().toLowerCase();
     if (!query) return this.apps;
     return this.apps.filter(app => {
-      const haystack = [app.name, ...(app.aliases || [])].join(' ').toLowerCase();
+      const endpointNames = (app.endpoints || []).flatMap(endpoint => [endpoint.entry_name, endpoint.label || '']);
+      const haystack = [app.name, ...(app.aliases || []), ...endpointNames].join(' ').toLowerCase();
       return haystack.includes(query) || (app.url || '').toLowerCase().includes(query);
     });
   },
@@ -155,6 +168,7 @@ Alpine.data('dashboard', () => ({
     this.editConfig = {
       name: app.name,
       aliases: [...(app.aliases || [])],
+      endpoints: (app.endpoints || []).map(endpoint => ({ ...endpoint })),
       domain_suffix: app.domain_suffix || this.appSuffixes[0]?.suffix || '',
       app_type: app.app_type || '',
       cwd: app.cwd,
@@ -196,6 +210,14 @@ Alpine.data('dashboard', () => ({
     target.splice(index, 1);
   },
 
+  addEndpoint(target) {
+    target.push({ entry_name: '', label: '', port_env: '' });
+  },
+
+  removeEndpoint(target, index) {
+    target.splice(index, 1);
+  },
+
   addRegisterEnvEntry() {
     this.registerEnvEntries.push({ key: '', value: '' });
   },
@@ -221,6 +243,11 @@ Alpine.data('dashboard', () => ({
     const payload = {
       name: this.editConfig.name,
       aliases: this.editConfig.aliases.map(alias => alias.trim()).filter(Boolean),
+      endpoints: this.editConfig.endpoints.map(endpoint => ({
+        entry_name: (endpoint.entry_name || '').trim(),
+        label: (endpoint.label || '').trim(),
+        port_env: (endpoint.port_env || '').trim()
+      })).filter(endpoint => endpoint.entry_name || endpoint.port_env),
       domain_suffix: this.editConfig.domain_suffix,
       app_type: this.editConfig.app_type.trim(),
       cwd: this.editConfig.cwd.trim(),
@@ -310,6 +337,7 @@ Alpine.data('dashboard', () => ({
   },
 
   openAddModal() {
+    this.registerEndpoints = this.registerEndpoints || [];
     const modal = document.getElementById('add_modal');
     if (modal) modal.showModal();
   },
@@ -429,6 +457,11 @@ Alpine.data('dashboard', () => ({
     const payload = {
       name: name,
       aliases: this.registerAliases.map(alias => alias.trim()).filter(Boolean),
+      endpoints: this.registerEndpoints.map(endpoint => ({
+        entry_name: (endpoint.entry_name || '').trim(),
+        label: (endpoint.label || '').trim(),
+        port_env: (endpoint.port_env || '').trim()
+      })).filter(endpoint => endpoint.entry_name || endpoint.port_env),
       domain_suffix: this.form.domain_suffix,
       app_type: this.form.app_type.trim(),
       cwd,
@@ -463,6 +496,7 @@ Alpine.data('dashboard', () => ({
       this.form = { name: '', cwd: '', app_type: '', cmd: '', idle_timeout: '5m', port: '' };
       this.registerArgs = [];
       this.registerAliases = [];
+      this.registerEndpoints = [];
       this.registerEnvEntries = [];
       this.closeAddModal();
       await this.fetchApps();

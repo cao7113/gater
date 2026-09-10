@@ -201,3 +201,39 @@ func TestAliasesUseUnifiedNamesIndex(t *testing.T) {
 		t.Fatal("removed alias was restored from store")
 	}
 }
+
+func TestEndpointUsesUnifiedNamesIndex(t *testing.T) {
+	st, err := store.NewStore(filepath.Join(t.TempDir(), "store.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := New(context.Background(), st)
+	if err := mgr.RegisterApp(config.AppConfig{
+		Name: "livebook", Aliases: []string{"lb"}, DomainSuffix: ".s", Cwd: "/tmp", Cmd: "echo", IdleTimeout: "5m",
+		Endpoints: []config.EndpointConfig{{EntryName: "livebook-iframe", PortEnv: "IFRAME_PORT"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name     string
+		endpoint string
+	}{
+		{"livebook", ""},
+		{"LB", ""},
+		{"livebook-iframe", "livebook-iframe"},
+	} {
+		application, endpoint, ok := mgr.GetEntry(test.name)
+		if !ok || application.Config.Name != "livebook" || endpoint != test.endpoint {
+			t.Fatalf("GetEntry(%q) = (%v, %q, %v)", test.name, application, endpoint, ok)
+		}
+	}
+
+	err = mgr.RegisterApp(config.AppConfig{
+		Name: "other", DomainSuffix: ".s", Cwd: "/tmp", Cmd: "echo", IdleTimeout: "5m",
+		Endpoints: []config.EndpointConfig{{EntryName: "LB", PortEnv: "OTHER_PORT"}},
+	})
+	if !errors.Is(err, ErrAppExists) {
+		t.Fatalf("expected endpoint conflict, got %v", err)
+	}
+}

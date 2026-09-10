@@ -45,6 +45,28 @@ func TestEnvironment(t *testing.T) {
 	}
 }
 
+func TestEnvironmentIncludesEndpointPort(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name:         "livebook",
+		DomainSuffix: ".s",
+		Endpoints: []config.EndpointConfig{{
+			EntryName: "livebook-iframe",
+			PortEnv:   "IFRAME_PORT",
+		}},
+	})
+	application.Port = 41001
+	application.EndpointPorts["livebook-iframe"] = 41002
+	application.Config.Env = map[string]string{"URL": "http://127.0.0.1:${IFRAME_PORT}"}
+
+	context := application.newAppTypeContext()
+	if context.Env["IFRAME_PORT"] != "41002" {
+		t.Fatalf("IFRAME_PORT = %q, want 41002", context.Env["IFRAME_PORT"])
+	}
+	if context.Env["URL"] != "http://127.0.0.1:41002" {
+		t.Fatalf("URL = %q, want endpoint port expansion", context.Env["URL"])
+	}
+}
+
 func TestURLUsesAppDomain(t *testing.T) {
 	application := NewApp(config.AppConfig{Name: "demo", DomainSuffix: ".l"})
 	if got := application.URL(); got != "http://demo.l" {

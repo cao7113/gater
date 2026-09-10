@@ -20,22 +20,24 @@ type appManager interface {
 }
 
 type AppInfo struct {
-	Name             string            `json:"name"`
-	Aliases          []string          `json:"aliases,omitempty"`
-	DomainSuffix     string            `json:"domain_suffix"`
-	URL              string            `json:"url"`
-	AppType          string            `json:"app_type"`
-	Cwd              string            `json:"cwd"`
-	Cmd              string            `json:"cmd"`
-	Args             []string          `json:"args"`
-	Env              map[string]string `json:"env"`
-	ConfigPort       int               `json:"config_port"`
-	Port             int               `json:"port"`
-	State            string            `json:"state"`
-	IdleTimeoutSec   int               `json:"idle_timeout_sec"`
-	RemainingSeconds int               `json:"remaining_seconds"`
-	StartupMs        int64             `json:"startup_ms"`
-	LastStartedAt    *time.Time        `json:"last_started_at"`
+	Name             string                  `json:"name"`
+	Aliases          []string                `json:"aliases,omitempty"`
+	Endpoints        []config.EndpointConfig `json:"endpoints,omitempty"`
+	EndpointPorts    map[string]int          `json:"endpoint_ports,omitempty"`
+	DomainSuffix     string                  `json:"domain_suffix"`
+	URL              string                  `json:"url"`
+	AppType          string                  `json:"app_type"`
+	Cwd              string                  `json:"cwd"`
+	Cmd              string                  `json:"cmd"`
+	Args             []string                `json:"args"`
+	Env              map[string]string       `json:"env"`
+	ConfigPort       int                     `json:"config_port"`
+	Port             int                     `json:"port"`
+	State            string                  `json:"state"`
+	IdleTimeoutSec   int                     `json:"idle_timeout_sec"`
+	RemainingSeconds int                     `json:"remaining_seconds"`
+	StartupMs        int64                   `json:"startup_ms"`
+	LastStartedAt    *time.Time              `json:"last_started_at"`
 }
 
 // ServerConfig 是 GET /api/config 返回的服务器运行时配置快照。

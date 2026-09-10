@@ -103,6 +103,16 @@
                       x-text="alias"></a>
                   </template>
                 </p>
+                <div x-show="app.endpoints && app.endpoints.length" class="mt-2 space-y-1">
+                  <div class="text-xs text-base-content/60">额外入口：</div>
+                  <template x-for="endpoint in (app.endpoints || [])" :key="endpoint.entry_name">
+                    <a :href="getEndpointURL(app, endpoint)" target="_blank"
+                      class="link link-hover link-accent font-mono text-xs mr-3" :title="getEndpointURL(app, endpoint)">
+                      <span x-text="endpoint.label || endpoint.entry_name"></span>
+                      <span class="opacity-60" x-text="' (' + endpoint.entry_name + ')'"></span>
+                    </a>
+                  </template>
+                </div>
               </div>
 
               <!-- 状态徽章 (使用 x-show 确保 DOM 稳定) -->
@@ -303,6 +313,29 @@
                     class="input input-bordered input-sm join-item w-full font-mono" placeholder="例如 lb" />
                   <button type="button" @click="removeAlias(editConfig.aliases, index)"
                     class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">额外入口（endpoints）</label>
+              <button type="button" @click="addEndpoint(editConfig.endpoints)" class="btn btn-ghost btn-xs">+
+                添加入口</button>
+            </div>
+            <div class="space-y-2">
+              <template x-for="(endpoint, index) in editConfig.endpoints" :key="index">
+                <div class="border border-base-300 rounded-lg p-2 space-y-2">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input type="text" x-model="endpoint.entry_name" class="input input-bordered input-sm font-mono"
+                      placeholder="entry_name，例如 livebook-iframe" />
+                    <input type="text" x-model="endpoint.label" class="input input-bordered input-sm"
+                      placeholder="label（可选）" />
+                    <input type="text" x-model="endpoint.port_env" class="input input-bordered input-sm font-mono"
+                      placeholder="port_env，例如 IFRAME_PORT" />
+                  </div>
+                  <button type="button" @click="removeEndpoint(editConfig.endpoints, index)"
+                    class="btn btn-ghost btn-xs text-error">删除入口</button>
                 </div>
               </template>
             </div>
@@ -523,6 +556,28 @@
                     class="input input-bordered input-sm join-item w-full font-mono" placeholder="例如 lb" />
                   <button type="button" @click="removeAlias(registerAliases, index)"
                     class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="form-control mb-3">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">额外入口（endpoints）</label>
+              <button type="button" @click="addEndpoint(registerEndpoints)" class="btn btn-ghost btn-xs">+ 添加入口</button>
+            </div>
+            <div class="space-y-2">
+              <template x-for="(endpoint, index) in registerEndpoints" :key="index">
+                <div class="border border-base-300 rounded-lg p-2 space-y-2">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input type="text" x-model="endpoint.entry_name" class="input input-bordered input-sm font-mono"
+                      placeholder="entry_name，例如 livebook-iframe" />
+                    <input type="text" x-model="endpoint.label" class="input input-bordered input-sm"
+                      placeholder="label（可选）" />
+                    <input type="text" x-model="endpoint.port_env" class="input input-bordered input-sm font-mono"
+                      placeholder="port_env，例如 IFRAME_PORT" />
+                  </div>
+                  <button type="button" @click="removeEndpoint(registerEndpoints, index)"
+                    class="btn btn-ghost btn-xs text-error">删除入口</button>
                 </div>
               </template>
             </div>

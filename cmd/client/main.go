@@ -87,7 +87,7 @@ func run(c *client, command string, args []string) error {
 		return c.show(oneAppArg(command, args))
 	case "runtime", "env":
 		return c.runtime(args)
-	case "log":
+	case "logs":
 		return c.logs(oneAppArg(command, args))
 	case "start":
 		return c.action("start", oneAppArg(command, args))
@@ -114,6 +114,10 @@ func (c *client) list() error {
 	fmt.Printf("%-24s %-10s %-8s %s\n", "NAME", "STATE", "PORT", "CWD")
 	for _, app := range apps {
 		fmt.Printf("%-24s %-10s %-8d %s\n", app.Name, app.State, app.Port, app.Cwd)
+		for _, endpoint := range app.Endpoints {
+			port := app.EndpointPorts[strings.ToLower(strings.TrimSpace(endpoint.EntryName))]
+			fmt.Printf("  %-22s %-10s %-8d %s\n", endpoint.DisplayLabel(), "endpoint", port, endpointURL(app, endpoint.EntryName))
+		}
 	}
 	return nil
 }
@@ -148,6 +152,7 @@ func (c *client) aliases(args []string) error {
 		return err
 	}
 	entries := buildNamesList(apps)
+	entries = filterEntriesBySource(entries, "alias")
 	if keyword != "" {
 		entries = filterNames(entries, keyword)
 	}
@@ -207,11 +212,14 @@ func (c *client) names(args []string) error {
 }
 
 func buildNamesList(apps []api.AppInfo) []nameEntry {
-	res := make([]nameEntry, 0, len(apps))
+	res := make([]nameEntry, 0, len(apps)*2)
 	for _, app := range apps {
 		res = append(res, nameEntry{Value: app.Name, Name: app.Name, URL: app.URL, Source: "name"})
 		for _, alias := range app.Aliases {
 			res = append(res, nameEntry{Value: alias, Name: app.Name, URL: aliasURL(app, alias), Source: "alias"})
+		}
+		for _, endpoint := range app.Endpoints {
+			res = append(res, nameEntry{Value: endpoint.EntryName, Name: app.Name, URL: endpointURL(app, endpoint.EntryName), Source: "endpoint"})
 		}
 	}
 	return res
@@ -231,12 +239,31 @@ func filterNames(entries []nameEntry, keyword string) []nameEntry {
 	return filtered
 }
 
+func filterEntriesBySource(entries []nameEntry, source string) []nameEntry {
+	filtered := make([]nameEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Source == source {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
 func aliasURL(app api.AppInfo, alias string) string {
 	target, err := url.Parse(app.URL)
 	if err != nil || target.Scheme == "" {
 		return ""
 	}
 	target.Host = alias + app.DomainSuffix
+	return target.String()
+}
+
+func endpointURL(app api.AppInfo, entryName string) string {
+	target, err := url.Parse(app.URL)
+	if err != nil || target.Scheme == "" || strings.TrimSpace(entryName) == "" {
+		return ""
+	}
+	target.Host = strings.ToLower(strings.TrimSpace(entryName)) + app.DomainSuffix
 	return target.String()
 }
 
@@ -451,7 +478,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "\n命令:")
 	fmt.Fprintln(os.Stderr, "  list              列出所有应用")
 	fmt.Fprintln(os.Stderr, "  aliases [keyword] 查看或搜索所有应用别名")
-	fmt.Fprintln(os.Stderr, "  names [keyword]   查看或搜索所有应用名称与别名")
+	fmt.Fprintln(os.Stderr, "  names [keyword]   查看或搜索所有应用名称、别名与入口")
 	fmt.Fprintln(os.Stderr, "  config            显示 store 配置")
 	fmt.Fprintln(os.Stderr, "  doctor            查看 Gater process/agent 运行环境")
 	fmt.Fprintln(os.Stderr, "  next-port         获取一个可用的本地应用端口")

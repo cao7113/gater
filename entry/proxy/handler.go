@@ -31,17 +31,23 @@ func NewHandler(mgr *manager.Manager, suffixes []config.AppSuffix) http.Handler 
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := appName(r.Host, sorted)
-		app, ok := mgr.GetApp(name)
+		application, endpoint, ok := mgr.GetEntry(name)
 		if !ok {
 			http.Error(w, fmt.Sprintf("Gater: 未注册的应用域名 [%s], 访问admin：%v", r.Host, config.AdminHosts), http.StatusNotFound)
 			return
 		}
-		if err := app.Run(r.Context()); err != nil {
+		if err := application.Run(r.Context()); err != nil {
 			http.Error(w, fmt.Sprintf("Gater: 无法拉起服务 [%s]: %v", name, err), http.StatusBadGateway)
 			return
 		}
-		app.Touch()
-		app.Proxy.ServeHTTP(w, r)
+		application.Touch()
+		if endpoint == "" {
+			application.Proxy.ServeHTTP(w, r)
+			return
+		}
+		if err := application.ProxyEndpoint(w, r, endpoint); err != nil {
+			http.Error(w, fmt.Sprintf("Gater: endpoint [%s] 不可用: %v", endpoint, err), http.StatusBadGateway)
+		}
 	})
 }
 

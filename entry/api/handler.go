@@ -388,6 +388,8 @@ func appToInfo(a *app.App) AppInfo {
 	return AppInfo{
 		Name:             a.Config.Name,
 		Aliases:          a.Config.Aliases,
+		Endpoints:        a.Config.Endpoints,
+		EndpointPorts:    a.EndpointPorts,
 		DomainSuffix:     a.Config.DomainSuffix,
 		URL:              a.URL(),
 		AppType:          a.Config.AppType,
