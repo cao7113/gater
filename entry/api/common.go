@@ -9,11 +9,13 @@ import (
 
 type appManager interface {
 	GetAllApps() map[string]*app.App
+	GetAppsOrder() []string
 	GetApp(name string) (*app.App, bool)
 	AddOrUpdateApp(appYAMLPath string) error
 	RegisterApp(cfg config.AppConfig) error
 	UpdateApp(name string, cfg config.AppConfig) error
 	RemoveApp(name string) error
+	SetAppsOrder(order []string) error
 	StoreConfig() ([]byte, error)
 	AppSuffixes() []config.AppSuffix
 	ServerConfig() ServerConfig

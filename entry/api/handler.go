@@ -95,11 +95,36 @@ func (h *handler) nextPort(w http.ResponseWriter, _ *http.Request) {
 func (h *handler) listApps(w http.ResponseWriter, _ *http.Request) {
 	apps := h.mgr.GetAllApps()
 	items := make([]AppInfo, 0, len(apps))
+	for _, name := range h.mgr.GetAppsOrder() {
+		if application, exists := apps[name]; exists {
+			items = append(items, appToInfo(application))
+			delete(apps, name)
+		}
+	}
+	remaining := make([]*app.App, 0, len(apps))
 	for _, application := range apps {
+		remaining = append(remaining, application)
+	}
+	sort.Slice(remaining, func(i, j int) bool { return remaining[i].Config.Name < remaining[j].Config.Name })
+	for _, application := range remaining {
 		items = append(items, appToInfo(application))
 	}
-	sortByName(items)
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (h *handler) setAppsOrder(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Order []string `json:"order"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "请求格式无效: "+err.Error())
+		return
+	}
+	if err := h.mgr.SetAppsOrder(request.Order); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (h *handler) getStoreConfig(w http.ResponseWriter, _ *http.Request) {

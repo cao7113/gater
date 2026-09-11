@@ -170,6 +170,30 @@ func (m *Manager) GetAllApps() map[string]*app.App {
 	return res
 }
 
+func (m *Manager) GetAppsOrder() []string {
+	return m.store.Order()
+}
+
+func (m *Manager) SetAppsOrder(order []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	seen := make(map[string]struct{}, len(order))
+	for _, name := range order {
+		if _, exists := m.apps[name]; !exists {
+			return fmt.Errorf("应用不存在: %s", name)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("应用顺序中存在重复名称: %s", name)
+		}
+		seen[name] = struct{}{}
+	}
+	if len(seen) != len(m.apps) {
+		return fmt.Errorf("应用顺序必须包含全部应用")
+	}
+	return m.store.SetOrder(order)
+}
+
 func (m *Manager) RemoveApp(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

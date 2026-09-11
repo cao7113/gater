@@ -19,6 +19,7 @@ func NewHandler(mgr appManager) http.Handler {
 
 	// App collection operations.
 	mux.HandleFunc("GET /api/apps", h.listApps)
+	mux.HandleFunc("PUT /api/apps/order", h.setAppsOrder)
 	mux.HandleFunc("POST /api/apps/from-config", h.createAppFromConfig)
 
 	// Single app operations.

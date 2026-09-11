@@ -79,7 +79,11 @@
     <!-- 应用列表卡片网格 -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <template x-for="app in filteredApps()" :key="app.name">
-        <div class="card bg-base-100 shadow-lg border border-base-200 hover:border-primary/40 transition-all">
+        <div draggable="true"
+          :class="{ 'opacity-50': draggedAppName === app.name, 'border-primary': dragOverAppName === app.name }"
+          @dragstart="startAppDrag(app, $event)" @dragover="dragOverApp(app, $event)" @drop="dropApp(app, $event)"
+          @dragend="finishAppDrag()"
+          class="card bg-base-100 shadow-lg border border-base-200 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing">
           <div class="card-body p-5">
             <div class="flex justify-between items-start">
               <div>

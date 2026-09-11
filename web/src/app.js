@@ -36,6 +36,10 @@ Alpine.data('dashboard', () => ({
   app_templates: [],
   serverVersion: 'dev',
   searchQuery: '',
+  draggedAppName: '',
+  dragOverAppName: '',
+  isDragging: false,
+  isSavingOrder: false,
   form: {
     name: '',
     domain_suffix: '',
@@ -88,6 +92,7 @@ Alpine.data('dashboard', () => ({
   },
 
   async fetchApps() {
+    if (this.isDragging || this.isSavingOrder) return;
     try {
       const res = await fetch('/api/apps');
       if (res.ok) {
@@ -95,6 +100,68 @@ Alpine.data('dashboard', () => ({
       }
     } catch (e) {
       console.error('获取应用列表失败', e);
+    }
+  },
+
+  startAppDrag(app, event) {
+    if (this.searchQuery) return;
+    this.draggedAppName = app.name;
+    this.isDragging = true;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', app.name);
+  },
+
+  dragOverApp(app, event) {
+    if (!this.isDragging || app.name === this.draggedAppName) return;
+    event.preventDefault();
+    this.dragOverAppName = app.name;
+    event.dataTransfer.dropEffect = 'move';
+  },
+
+  async dropApp(app, event) {
+    event.preventDefault();
+    if (!this.draggedAppName || app.name === this.draggedAppName) {
+      this.finishAppDrag();
+      return;
+    }
+
+    const fromIndex = this.apps.findIndex(item => item.name === this.draggedAppName);
+    const toIndex = this.apps.findIndex(item => item.name === app.name);
+    if (fromIndex < 0 || toIndex < 0) {
+      this.finishAppDrag();
+      return;
+    }
+
+    const reordered = [...this.apps];
+    const [dragged] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, dragged);
+    this.apps = reordered;
+    this.finishAppDrag();
+    await this.saveAppsOrder();
+  },
+
+  finishAppDrag() {
+    this.draggedAppName = '';
+    this.dragOverAppName = '';
+    this.isDragging = false;
+  },
+
+  async saveAppsOrder() {
+    this.isSavingOrder = true;
+    try {
+      const res = await fetch('/api/apps/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: this.apps.map(app => app.name) })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      this.showToast('应用顺序已保存', 'success');
+    } catch (e) {
+      this.showToast('应用顺序保存失败', 'error');
+      this.isSavingOrder = false;
+      await this.fetchApps();
+    } finally {
+      this.isSavingOrder = false;
     }
   },
 

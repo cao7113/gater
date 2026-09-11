@@ -16,17 +16,22 @@ import (
 	"github.com/cao7113/gater/internal/config"
 )
 
-type fakeMgr struct{ apps map[string]*app.App }
+type fakeMgr struct {
+	apps      map[string]*app.App
+	appsOrder []string
+}
 
 func newFakeMgr(apps ...*app.App) *fakeMgr {
 	manager := &fakeMgr{apps: make(map[string]*app.App)}
 	for _, application := range apps {
 		manager.apps[application.Config.Name] = application
+		manager.appsOrder = append([]string{application.Config.Name}, manager.appsOrder...)
 	}
 	return manager
 }
 
 func (f *fakeMgr) GetAllApps() map[string]*app.App { return f.apps }
+func (f *fakeMgr) GetAppsOrder() []string          { return f.appsOrder }
 func (f *fakeMgr) GetApp(name string) (*app.App, bool) {
 	application, ok := f.apps[name]
 	return application, ok
@@ -47,8 +52,12 @@ func (f *fakeMgr) UpdateApp(name string, cfg config.AppConfig) error {
 	f.apps[name] = app.NewApp(cfg)
 	return nil
 }
-func (f *fakeMgr) RemoveApp(name string) error  { delete(f.apps, name); return nil }
-func (f *fakeMgr) StoreConfig() ([]byte, error) { return []byte("demo:\n  name: demo\n"), nil }
+func (f *fakeMgr) RemoveApp(name string) error {
+	delete(f.apps, name)
+	return nil
+}
+func (f *fakeMgr) SetAppsOrder(order []string) error { f.appsOrder = order; return nil }
+func (f *fakeMgr) StoreConfig() ([]byte, error)      { return []byte("demo:\n  name: demo\n"), nil }
 func (f *fakeMgr) AppSuffixes() []config.AppSuffix {
 	return []config.AppSuffix{
 		{Suffix: ".s", Scheme: "https"},
@@ -262,7 +271,7 @@ func TestGetStoreConfig(t *testing.T) {
 	}
 }
 
-func TestListAppsSorted(t *testing.T) {
+func TestListAppsUsesSavedOrder(t *testing.T) {
 	res := httptest.NewRecorder()
 	(&handler{mgr: newFakeMgr(testApp("zebra"), testApp("alpha"))}).listApps(res, httptest.NewRequest(http.MethodGet, "/api/apps", nil))
 	var apps []AppInfo
@@ -270,7 +279,7 @@ func TestListAppsSorted(t *testing.T) {
 		t.Fatal(err)
 	}
 	if apps[0].Name != "alpha" || apps[1].Name != "zebra" {
-		t.Fatalf("want sorted apps")
+		t.Fatalf("want saved app order")
 	}
 }
 
