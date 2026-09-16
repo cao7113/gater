@@ -313,6 +313,16 @@ Alpine.data('dashboard', () => ({
     }));
   },
 
+  cloneCommandMap(commands) {
+    return Object.fromEntries(Object.entries(commands || {}).map(([name, command]) => [name, {
+      cmd: command.cmd || '',
+      args: [...(command.args || [])],
+      cwd: command.cwd || '',
+      env: { ...(command.env || {}) },
+      unset_env: [...(command.unset_env || [])]
+    }]));
+  },
+
   commandEntriesToMap(entries) {
     const commands = {};
     for (const entry of entries || []) {
@@ -566,6 +576,47 @@ Alpine.data('dashboard', () => ({
     } finally {
       this.commandLoading = false;
     }
+  },
+
+  forkAppConfig(app) {
+    if (!app) return;
+    const source = {
+      name: app.name || '',
+      aliases: [...(app.aliases || [])],
+      endpoints: (app.endpoints || []).map(endpoint => ({
+        entry_name: endpoint.entry_name || '',
+        label: endpoint.label || '',
+        port_env: endpoint.port_env || ''
+      })),
+      domain_suffix: app.domain_suffix || this.appSuffixes[0]?.suffix || '',
+      app_type: app.app_type || '',
+      cwd: app.cwd || '',
+      cmd: app.cmd || '',
+      args: [...(app.args || [])],
+      port: app.config_port || app.port || 0,
+      idle_timeout: app.idle_timeout_sec ? `${app.idle_timeout_sec}s` : '5m',
+      env: { ...(app.env || {}) },
+      commands: this.cloneCommandMap(app.commands)
+    };
+    const forkedName = source.name ? `${source.name.replace(/-forked$/i, '')}-forked` : 'app-forked';
+
+    this.form = {
+      name: forkedName,
+      domain_suffix: source.domain_suffix,
+      cwd: source.cwd,
+      app_type: source.app_type,
+      cmd: source.cmd,
+      idle_timeout: source.idle_timeout,
+      port: source.port || ''
+    };
+    this.registerAliases = [...source.aliases];
+    this.registerEndpoints = [...source.endpoints];
+    this.registerArgs = [...source.args];
+    this.registerEnvEntries = Object.entries(source.env).map(([key, value]) => ({ key, value }));
+    this.registerCommands = this.commandMapToEntries(source.commands);
+
+    this.openAddModal();
+    this.showToast(`已复制 [${app.name}] 配置到新建表单，名称已改为 [${forkedName}]`, 'success');
   },
 
   openAddModal() {

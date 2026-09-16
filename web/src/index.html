@@ -209,13 +209,22 @@
                   </svg>
                   配置
                 </button>
+                <button type="button" @click="forkAppConfig(app)"
+                  class="btn btn-ghost btn-xs gap-1 text-base-content/70">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 7a3 3 0 110-6 3 3 0 010 6zm8 16a3 3 0 110-6 3 3 0 010 6zM8 19a3 3 0 110-6 3 3 0 010 6zm8-13a3 3 0 110-6 3 3 0 010 6zM11 5l2 2m-2 12l2-2M8 9l8 6">
+                    </path>
+                  </svg>
+                  Fork
+                </button>
                 <button type="button" @click="openRuntime(app)" class="btn btn-ghost btn-xs gap-1 text-base-content/70">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m18 0h-2M5 15H3m18 0h-2M7 5h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2zm2 6h6m-6 4h4">
                     </path>
                   </svg>
-                  运行
+                  运行信息
                 </button>
                 <button type="button" @click="openCommandModal(app)"
                   class="btn btn-ghost btn-xs gap-1 text-base-content/70">
@@ -623,56 +632,58 @@
           <span class="loading loading-spinner loading-md text-primary"></span>
         </div>
 
-        <div x-show="!runtimeLoading && runtimeData" class="space-y-4">
-          <div class="grid grid-cols-2 gap-3 text-xs">
-            <div class="bg-base-200 rounded-lg p-3">
-              <div class="text-base-content/60">状态</div>
-              <div class="font-bold text-base-content" x-text="runtimeData.state"></div>
-            </div>
-            <div class="bg-base-200 rounded-lg p-3">
-              <div class="text-base-content/60">端口</div>
-              <div class="font-bold text-base-content"
-                x-text="runtimeData.port || (runtimeData.config_port ? runtimeData.config_port + '（固定，未运行）' : '运行时分配')">
+        <template x-if="!runtimeLoading && runtimeData">
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div class="bg-base-200 rounded-lg p-3">
+                <div class="text-base-content/60">状态</div>
+                <div class="font-bold text-base-content" x-text="runtimeData.state"></div>
+              </div>
+              <div class="bg-base-200 rounded-lg p-3">
+                <div class="text-base-content/60">端口</div>
+                <div class="font-bold text-base-content"
+                  x-text="runtimeData.port || (runtimeData.config_port ? runtimeData.config_port + '（固定，未运行）' : '运行时分配')">
+                </div>
+              </div>
+              <div class="bg-base-200 rounded-lg p-3">
+                <div class="text-base-content/60">PID</div>
+                <div class="font-bold text-base-content" x-text="runtimeData.pid"></div>
+              </div>
+              <div class="bg-base-200 rounded-lg p-3">
+                <div class="text-base-content/60">启动耗时</div>
+                <div class="font-bold text-base-content" x-text="runtimeData.startup_ms + 'ms'"></div>
               </div>
             </div>
-            <div class="bg-base-200 rounded-lg p-3">
-              <div class="text-base-content/60">PID</div>
-              <div class="font-bold text-base-content" x-text="runtimeData.pid"></div>
-            </div>
-            <div class="bg-base-200 rounded-lg p-3">
-              <div class="text-base-content/60">启动耗时</div>
-              <div class="font-bold text-base-content" x-text="runtimeData.startup_ms + 'ms'"></div>
-            </div>
-          </div>
 
-          <div class="space-y-2">
-            <div class="text-xs font-semibold text-base-content/70">启动命令</div>
-            <pre
-              class="bg-neutral text-neutral-content p-3 rounded-lg overflow-auto text-[11px] whitespace-pre-wrap break-all"
-              x-text="runtimeData.cmd + (runtimeData.args && runtimeData.args.length ? ' ' + runtimeData.args.join(' ') : '')"></pre>
-          </div>
-
-          <div class="space-y-2">
-            <div class="text-xs font-semibold text-base-content/70">工作目录</div>
-            <pre
-              class="bg-neutral text-neutral-content p-3 rounded-lg overflow-auto text-[11px] whitespace-pre-wrap break-all"
-              x-text="runtimeData.cwd"></pre>
-          </div>
-
-          <div class="space-y-2">
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-xs font-semibold text-base-content/70">环境变量</div>
-              <label class="label cursor-pointer gap-2 py-0">
-                <span class="label-text text-xs">显示敏感值</span>
-                <input type="checkbox" class="toggle toggle-xs toggle-warning" x-model="runtimeShowSensitive"
-                  @change="toggleRuntimeSensitive()" />
-              </label>
+            <div class="space-y-2">
+              <div class="text-xs font-semibold text-base-content/70">启动命令</div>
+              <pre
+                class="bg-neutral text-neutral-content p-3 rounded-lg overflow-auto text-[11px] whitespace-pre-wrap break-all"
+                x-text="runtimeData.cmd + (runtimeData.args && runtimeData.args.length ? ' ' + runtimeData.args.join(' ') : '')"></pre>
             </div>
-            <pre
-              class="bg-neutral text-neutral-content p-3 rounded-lg max-h-80 overflow-auto text-[11px] whitespace-pre-wrap break-all"
-              x-text="JSON.stringify(runtimeData.env || {}, null, 2)"></pre>
+
+            <div class="space-y-2">
+              <div class="text-xs font-semibold text-base-content/70">工作目录</div>
+              <pre
+                class="bg-neutral text-neutral-content p-3 rounded-lg overflow-auto text-[11px] whitespace-pre-wrap break-all"
+                x-text="runtimeData.cwd"></pre>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-3">
+                <div class="text-xs font-semibold text-base-content/70">环境变量</div>
+                <label class="label cursor-pointer gap-2 py-0">
+                  <span class="label-text text-xs">显示敏感值</span>
+                  <input type="checkbox" class="toggle toggle-xs toggle-warning" x-model="runtimeShowSensitive"
+                    @change="toggleRuntimeSensitive()" />
+                </label>
+              </div>
+              <pre
+                class="bg-neutral text-neutral-content p-3 rounded-lg max-h-80 overflow-auto text-[11px] whitespace-pre-wrap break-all"
+                x-text="JSON.stringify(runtimeData.env || {}, null, 2)"></pre>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
       <form method="dialog" class="modal-backdrop">
         <button @click="closeRuntime()">关闭</button>
@@ -868,6 +879,24 @@
                           <input type="text" x-model="entry.value"
                             class="input input-bordered input-sm join-item w-full font-mono" placeholder="VALUE" />
                           <button type="button" @click="removeCommandEnvEntry(command, envIndex)"
+                            class="btn btn-ghost btn-sm join-item">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-xs text-base-content/60">取消继承的环境变量</span>
+                      <button type="button" @click="addCommandUnsetEnv(command)" class="btn btn-ghost btn-xs">+
+                        添加变量</button>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(name, unsetIndex) in command.unsetEnv" :key="unsetIndex">
+                        <div class="join w-full">
+                          <input type="text" x-model="command.unsetEnv[unsetIndex]"
+                            class="input input-bordered input-sm join-item w-full font-mono"
+                            placeholder="例如 PHX_SERVER" />
+                          <button type="button" @click="removeCommandUnsetEnv(command, unsetIndex)"
                             class="btn btn-ghost btn-sm join-item">删除</button>
                         </div>
                       </template>

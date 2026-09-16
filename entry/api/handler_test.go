@@ -386,6 +386,29 @@ func TestListAppsRemainingSeconds(t *testing.T) {
 	}
 }
 
+func TestListAppsIncludesCommandEnvironment(t *testing.T) {
+	application := app.NewApp(config.AppConfig{
+		Name: "myapp",
+		Cmd:  "echo",
+		Commands: map[string]config.CommandConfig{
+			"migrate": {
+				Cmd: "mix",
+				Env: map[string]string{"MIX_ENV": "test"},
+			},
+		},
+	})
+	res := httptest.NewRecorder()
+	(&handler{mgr: newFakeMgr(application)}).listApps(res, httptest.NewRequest(http.MethodGet, "/api/apps", nil))
+
+	var apps []AppInfo
+	if err := json.NewDecoder(res.Body).Decode(&apps); err != nil {
+		t.Fatal(err)
+	}
+	if got := apps[0].Commands["migrate"].Env["MIX_ENV"]; got != "test" {
+		t.Fatalf("want command environment MIX_ENV=test, got %q", got)
+	}
+}
+
 func TestDeleteApp(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/apps/myapp", nil)
 	req.SetPathValue("name", "myapp")

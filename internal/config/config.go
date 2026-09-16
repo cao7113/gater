@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultIdleTimeout = "10m"
+	DefaultIdleTimeout = "5m"
 	DefaultTargetHost  = "127.0.0.1"
 )
 
