@@ -155,6 +155,93 @@ func TestNextPort(t *testing.T) {
 	}
 }
 
+func TestRunCommand(t *testing.T) {
+	application := app.NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cwd:          t.TempDir(),
+		Cmd:          "echo",
+		Commands: map[string]config.CommandConfig{
+			"migrate": {Cmd: "printf", Args: []string{"migrated"}},
+		},
+	})
+	application.State = app.StateRunning
+	application.Port = 41001
+	mgr := newFakeMgr(application)
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/demo/commands/migrate", nil)
+	req.SetPathValue("name", "demo")
+	req.SetPathValue("command", "migrate")
+	res := httptest.NewRecorder()
+
+	(&handler{mgr: mgr}).runCommand(res, req)
+
+	if res.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", res.Code, res.Body.String())
+	}
+	var response struct {
+		Output   string `json:"output"`
+		ExitCode int    `json:"exit_code"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Output != "migrated" || response.ExitCode != 0 {
+		t.Fatalf("unexpected command response: %+v", response)
+	}
+	if application.GetState() != app.StateRunning || application.Port != 41001 {
+		t.Fatalf("command changed server lifecycle: state=%q port=%d", application.GetState(), application.Port)
+	}
+}
+
+func TestListAndGetCommand(t *testing.T) {
+	application := app.NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cwd:          "/tmp/demo",
+		Cmd:          "mix",
+		Env:          map[string]string{"MIX_ENV": "dev", "PHX_SERVER": "true"},
+		Commands: map[string]config.CommandConfig{
+			"migrate": {Args: []string{"ecto.migrate"}, UnsetEnv: []string{"PHX_SERVER"}},
+		},
+	})
+	mgr := newFakeMgr(application)
+	h := &handler{mgr: mgr}
+
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/apps/demo/commands", nil)
+	listRequest.SetPathValue("name", "demo")
+	listResponse := httptest.NewRecorder()
+	h.listCommands(listResponse, listRequest)
+	if listResponse.Code != http.StatusOK {
+		t.Fatalf("list status = %d", listResponse.Code)
+	}
+	var commands []CommandInfo
+	if err := json.NewDecoder(listResponse.Body).Decode(&commands); err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 1 || commands[0].Name != "migrate" {
+		t.Fatalf("unexpected command list: %+v", commands)
+	}
+
+	showRequest := httptest.NewRequest(http.MethodGet, "/api/apps/demo/commands/migrate", nil)
+	showRequest.SetPathValue("name", "demo")
+	showRequest.SetPathValue("command", "migrate")
+	showResponse := httptest.NewRecorder()
+	h.getCommand(showResponse, showRequest)
+	var command CommandInfo
+	if err := json.NewDecoder(showResponse.Body).Decode(&command); err != nil {
+		t.Fatal(err)
+	}
+	if command.Cmd != "mix" || command.Cwd != "/tmp/demo" || command.Env["MIX_ENV"] != "dev" || command.Shell == "" {
+		t.Fatalf("unexpected command details: %+v", command)
+	}
+	if _, exists := command.Env["PHX_SERVER"]; exists || strings.Contains(command.Shell, "PHX_SERVER") {
+		t.Fatalf("unset environment variable was included in command details: %+v", command)
+	}
+	if !strings.Contains(command.Shell, "cd -- '/tmp/demo'") || !strings.Contains(command.Shell, "'MIX_ENV=dev'") || !strings.Contains(command.Shell, "'mix' 'ecto.migrate'") {
+		t.Fatalf("unexpected command shell: %q", command.Shell)
+	}
+}
+
 func TestCreateAppFromConfig(t *testing.T) {
 	mgr := newFakeMgr()
 	req := httptest.NewRequest(http.MethodPost, "/api/apps/from-config", bytes.NewBufferString(`{

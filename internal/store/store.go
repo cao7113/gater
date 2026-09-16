@@ -1,9 +1,11 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/cao7113/gater/internal/config"
@@ -30,7 +32,9 @@ func NewStore(paths ...string) (*Store, error) {
 		filePath: filePath,
 		Apps:     make(map[string]config.AppConfig),
 	}
-	_ = s.load()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("加载 store 失败: %w", err)
+	}
 	return s, nil
 }
 
@@ -105,7 +109,28 @@ func (s *Store) persist() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath, data, 0644)
+	temporary, err := os.CreateTemp(filepath.Dir(s.filePath), ".store-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, s.filePath)
 }
 
 func (s *Store) load() error {
@@ -132,6 +157,14 @@ func (s *Store) load() error {
 	}
 	if s.Apps == nil {
 		s.Apps = make(map[string]config.AppConfig)
+	}
+	for name, appConfig := range s.Apps {
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(appConfig.Name) == "" {
+			return fmt.Errorf("store 中存在空应用名称")
+		}
+		if name != appConfig.Name {
+			return fmt.Errorf("store 应用 key [%s] 与 name [%s] 不一致", name, appConfig.Name)
+		}
 	}
 	s.normalizeOrder()
 	return nil

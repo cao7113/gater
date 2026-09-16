@@ -23,10 +23,17 @@ Alpine.data('dashboard', () => ({
   configSaving: false,
   runtimeLoading: false,
   runtimeShowSensitive: false,
+  commandApp: null,
+  commandLoading: false,
+  commandResult: null,
+  commandDetail: null,
+  commandDetailLoading: false,
+  editCommands: [],
+  registerCommands: [],
   configYaml: '',
   configShell: '',
   runtimeData: null,
-  editConfig: { name: '', aliases: [], endpoints: [], app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {} },
+  editConfig: { name: '', aliases: [], endpoints: [], app_type: '', cwd: '', cmd: '', args: [], port: 0, idle_timeout: '', env: {}, commands: {} },
   registerArgs: [],
   registerAliases: [],
   registerEndpoints: [],
@@ -243,8 +250,10 @@ Alpine.data('dashboard', () => ({
       args: [...(app.args || [])],
       port: app.config_port || 0,
       idle_timeout: app.idle_timeout_sec ? `${app.idle_timeout_sec}s` : '',
-      env: { ...(app.env || {}) }
+      env: { ...(app.env || {}) },
+      commands: { ...(app.commands || {}) }
     };
+    this.editCommands = this.commandMapToEntries(this.editConfig.commands);
     this.envEntries = Object.entries(this.editConfig.env).map(([key, value]) => ({ key, value }));
     document.getElementById('config_modal')?.showModal();
     try {
@@ -293,6 +302,85 @@ Alpine.data('dashboard', () => ({
     this.registerEnvEntries.splice(index, 1);
   },
 
+  commandMapToEntries(commands) {
+    return Object.entries(commands || {}).map(([name, command]) => ({
+      name,
+      cmd: command.cmd || '',
+      args: [...(command.args || [])],
+      cwd: command.cwd || '',
+      envEntries: Object.entries(command.env || {}).map(([key, value]) => ({ key, value })),
+      unsetEnv: [...(command.unset_env || [])]
+    }));
+  },
+
+  commandEntriesToMap(entries) {
+    const commands = {};
+    for (const entry of entries || []) {
+      const name = (entry.name || '').trim();
+      if (!name) continue;
+      const env = Object.fromEntries((entry.envEntries || [])
+        .map(item => [(item.key || '').trim(), item.value || ''])
+        .filter(([key]) => key));
+      commands[name] = {
+        cmd: (entry.cmd || '').trim(),
+        args: (entry.args || []).map(arg => arg.trim()).filter(Boolean),
+        cwd: (entry.cwd || '').trim(),
+        env,
+        unset_env: (entry.unsetEnv || []).map(key => key.trim()).filter(Boolean)
+      };
+    }
+    return commands;
+  },
+
+  validateCommandEntries(entries) {
+    const names = new Set();
+    for (const entry of entries || []) {
+      const name = (entry.name || '').trim();
+      if (!name) {
+        this.showToast('快捷命令名称不能为空', 'error');
+        return false;
+      }
+      if (names.has(name)) {
+        this.showToast(`快捷命令 [${name}] 重复`, 'error');
+        return false;
+      }
+      names.add(name);
+    }
+    return true;
+  },
+
+  addCommand(target) {
+    target.push({ name: '', cmd: '', args: [], cwd: '', envEntries: [], unsetEnv: [] });
+  },
+
+  removeCommand(target, index) {
+    target.splice(index, 1);
+  },
+
+  addCommandArg(command) {
+    command.args.push('');
+  },
+
+  removeCommandArg(command, index) {
+    command.args.splice(index, 1);
+  },
+
+  addCommandEnvEntry(command) {
+    command.envEntries.push({ key: '', value: '' });
+  },
+
+  removeCommandEnvEntry(command, index) {
+    command.envEntries.splice(index, 1);
+  },
+
+  addCommandUnsetEnv(command) {
+    command.unsetEnv.push('');
+  },
+
+  removeCommandUnsetEnv(command, index) {
+    command.unsetEnv.splice(index, 1);
+  },
+
   addRegisterArg() {
     this.registerArgs.push('');
   },
@@ -302,6 +390,7 @@ Alpine.data('dashboard', () => ({
   },
 
   async saveAppConfig() {
+    if (!this.validateCommandEntries(this.editCommands)) return;
     const env = {};
     for (const entry of this.envEntries) {
       const key = entry.key.trim();
@@ -322,6 +411,7 @@ Alpine.data('dashboard', () => ({
       args: this.editConfig.args,
       port: Number(this.editConfig.port) || 0,
       env,
+      commands: this.commandEntriesToMap(this.editCommands),
       idle_timeout: this.editConfig.idle_timeout.trim()
     };
     this.configSaving = true;
@@ -403,8 +493,84 @@ Alpine.data('dashboard', () => ({
     this.runtimeData = null;
   },
 
+  openCommandModal(app) {
+    this.commandApp = app;
+    this.commandResult = null;
+    this.commandDetail = null;
+    this.commandDetailLoading = false;
+    this.commandLoading = false;
+    document.getElementById('command_modal')?.showModal();
+  },
+
+  closeCommandModal() {
+    document.getElementById('command_modal')?.close();
+    this.commandApp = null;
+    this.commandResult = null;
+    this.commandDetail = null;
+    this.commandLoading = false;
+  },
+
+  commandSummary(command) {
+    if (!command) return '';
+    return [command.cmd, ...(command.args || [])].filter(Boolean).join(' ');
+  },
+
+  async showCommandDetails(name) {
+    if (!this.commandApp) return;
+    this.commandDetailLoading = true;
+    try {
+      const res = await fetch(`/api/apps/${encodeURIComponent(this.commandApp.name)}/commands/${encodeURIComponent(name)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        this.showToast('读取命令详情失败: ' + (data.error || res.statusText), 'error');
+        return;
+      }
+      this.commandDetail = data;
+    } catch (e) {
+      this.showToast('读取命令详情失败: ' + e.message, 'error');
+    } finally {
+      this.commandDetailLoading = false;
+    }
+  },
+
+  async copyCommandShell(name) {
+    await this.showCommandDetails(name);
+    if (this.commandDetail?.shell) {
+      await this.copyText(this.commandDetail.shell, 'Shell 命令片段');
+    }
+  },
+
+  async executeCommand(name) {
+    if (!this.commandApp || this.commandLoading) return;
+    if (!window.confirm(`确定执行 ${name} 命令吗？`)) return;
+    this.commandLoading = true;
+    this.commandResult = null;
+    try {
+      const res = await fetch(`/api/apps/${encodeURIComponent(this.commandApp.name)}/commands/${encodeURIComponent(name)}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      this.commandResult = {
+        name,
+        ok: res.ok,
+        output: data.output || '',
+        exitCode: data.exit_code,
+        error: data.error || (res.ok ? '' : res.statusText)
+      };
+      if (res.ok) {
+        this.showToast(`命令 [${name}] 执行成功`, 'success');
+      } else {
+        this.showToast(`命令 [${name}] 执行失败`, 'error');
+      }
+    } catch (e) {
+      this.commandResult = { name, ok: false, output: '', exitCode: null, error: e.message };
+      this.showToast('命令执行请求失败: ' + e.message, 'error');
+    } finally {
+      this.commandLoading = false;
+    }
+  },
+
   openAddModal() {
     this.registerEndpoints = this.registerEndpoints || [];
+    this.registerCommands = this.registerCommands || [];
     const modal = document.getElementById('add_modal');
     if (modal) modal.showModal();
   },
@@ -520,6 +686,7 @@ Alpine.data('dashboard', () => ({
       this.showToast('请填写应用标识和启动命令', 'error');
       return;
     }
+    if (!this.validateCommandEntries(this.registerCommands)) return;
 
     const payload = {
       name: name,
@@ -538,6 +705,7 @@ Alpine.data('dashboard', () => ({
       env: Object.fromEntries(this.registerEnvEntries
         .map(entry => [entry.key.trim(), entry.value])
         .filter(([key]) => key)),
+      commands: this.commandEntriesToMap(this.registerCommands),
       idle_timeout: this.form.idle_timeout.trim() || '5m'
     };
 
@@ -565,6 +733,7 @@ Alpine.data('dashboard', () => ({
       this.registerAliases = [];
       this.registerEndpoints = [];
       this.registerEnvEntries = [];
+      this.registerCommands = [];
       this.closeAddModal();
       await this.fetchApps();
     } catch (e) {

@@ -117,6 +117,127 @@ func TestSnapshotUsesConfiguredEnvWhenNotRunning(t *testing.T) {
 	}
 }
 
+func TestRunCommandDoesNotChangeServerLifecycle(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cwd:          t.TempDir(),
+		Cmd:          "echo",
+		Args:         []string{"server"},
+		Env:          map[string]string{"BASE_VALUE": "base"},
+		Commands: map[string]config.CommandConfig{
+			"inspect": {
+				Cmd:  "sh",
+				Args: []string{"-c", "env"},
+				Env:  map[string]string{"COMMAND_VALUE": "command"},
+			},
+		},
+	})
+	application.State = StateRunning
+	application.Port = 41001
+	application.Pid = 12345
+
+	result, err := application.RunCommand(context.Background(), "inspect")
+	if err != nil {
+		t.Fatalf("RunCommand() error = %v", err)
+	}
+	if !strings.Contains(result.Output, "BASE_VALUE=base") || !strings.Contains(result.Output, "COMMAND_VALUE=command") || result.ExitCode != 0 {
+		t.Fatalf("unexpected command result: %+v", result)
+	}
+	if application.GetState() != StateRunning || application.Port != 41001 || application.Pid != 12345 || application.Cmd != nil {
+		t.Fatalf("command changed server lifecycle: state=%q port=%d pid=%d cmd=%v", application.GetState(), application.Port, application.Pid, application.Cmd)
+	}
+}
+
+func TestRunCommandReturnsExitCode(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cwd:          t.TempDir(),
+		Cmd:          "echo",
+		Commands: map[string]config.CommandConfig{
+			"fail": {Cmd: "sh", Args: []string{"-c", "printf failed; exit 7"}},
+		},
+	})
+
+	result, err := application.RunCommand(context.Background(), "fail")
+	if err == nil {
+		t.Fatal("RunCommand() error = nil, want failure")
+	}
+	if result.Output != "failed" || result.ExitCode != 7 {
+		t.Fatalf("unexpected failed command result: %+v", result)
+	}
+}
+
+func TestResolveCommandIncludesInheritedConfig(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cwd:          "/tmp/demo",
+		Cmd:          "mix",
+		Args:         []string{"phx.server"},
+		Env:          map[string]string{"DATABASE_URL": "postgres://localhost/${APP_NAME}", "MIX_ENV": "dev"},
+		Commands: map[string]config.CommandConfig{
+			"migrate": {Args: []string{"ecto.migrate"}, Env: map[string]string{"MIX_ENV": "test"}},
+		},
+	})
+
+	resolved, err := application.ResolveCommand("migrate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Cmd != "mix" || resolved.Cwd != "/tmp/demo" || len(resolved.Args) != 1 || resolved.Args[0] != "ecto.migrate" {
+		t.Fatalf("unexpected resolved command: %+v", resolved)
+	}
+	if resolved.Env["DATABASE_URL"] != "postgres://localhost/demo" || resolved.Env["MIX_ENV"] != "test" {
+		t.Fatalf("unexpected resolved environment: %#v", resolved.Env)
+	}
+}
+
+func TestResolveCommandDoesNotInheritAppArgs(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cwd:          "/tmp/demo",
+		Cmd:          "mix",
+		Args:         []string{"phx.server"},
+		Commands: map[string]config.CommandConfig{
+			"migrate": {},
+		},
+	})
+
+	resolved, err := application.ResolveCommand("migrate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Cmd != "mix" || resolved.Cwd != "/tmp/demo" || len(resolved.Args) != 0 {
+		t.Fatalf("unexpected command inheritance: %+v", resolved)
+	}
+}
+
+func TestResolveCommandUnsetsInheritedEnvironment(t *testing.T) {
+	application := NewApp(config.AppConfig{
+		Name:         "demo",
+		DomainSuffix: ".l",
+		Cmd:          "mix",
+		Env:          map[string]string{"PHX_SERVER": "true", "MIX_ENV": "dev"},
+		Commands: map[string]config.CommandConfig{
+			"migrate": {Args: []string{"ecto.migrate"}, UnsetEnv: []string{"PHX_SERVER"}},
+		},
+	})
+
+	resolved, err := application.ResolveCommand("migrate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := resolved.Env["PHX_SERVER"]; exists {
+		t.Fatalf("unset environment variable remained: %#v", resolved.Env)
+	}
+	if resolved.Env["MIX_ENV"] != "dev" {
+		t.Fatalf("unrelated environment variable was removed: %#v", resolved.Env)
+	}
+}
+
 func TestRunRejectsMissingWorkingDirectory(t *testing.T) {
 	application := NewApp(config.AppConfig{
 		Name:         "demo",

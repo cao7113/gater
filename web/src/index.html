@@ -217,6 +217,15 @@
                   </svg>
                   运行
                 </button>
+                <button type="button" @click="openCommandModal(app)"
+                  class="btn btn-ghost btn-xs gap-1 text-base-content/70">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 9l3 3-3 3m5 0h3M5 5h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"></path>
+                  </svg>
+                  命令 <span class="badge badge-ghost badge-xs font-mono"
+                    x-text="Object.keys(app.commands || {}).length"></span>
+                </button>
                 <button type="button" @click="openLogs(app.name)"
                   class="btn btn-ghost btn-xs gap-1 text-base-content/70">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -399,6 +408,84 @@
               </template>
             </div>
           </div>
+          <div class="form-control">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">快捷命令（commands）</label>
+              <button type="button" @click="addCommand(editCommands)" class="btn btn-ghost btn-xs">+ 添加命令</button>
+            </div>
+            <div class="space-y-3">
+              <template x-for="(command, index) in editCommands" :key="index">
+                <div class="border border-base-300 rounded-lg p-3 space-y-2">
+                  <div class="flex justify-between items-center gap-2">
+                    <input type="text" x-model="command.name" class="input input-bordered input-sm w-full font-mono"
+                      placeholder="命令名称，例如 migrate" />
+                    <button type="button" @click="removeCommand(editCommands, index)"
+                      class="btn btn-ghost btn-xs text-error shrink-0">删除命令</button>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input type="text" x-model="command.cmd" class="input input-bordered input-sm font-mono"
+                      placeholder="cmd（留空继承启动命令）" />
+                    <input type="text" x-model="command.cwd" class="input input-bordered input-sm font-mono"
+                      placeholder="cwd（留空继承应用目录）" />
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-xs text-base-content/60">参数</span>
+                      <button type="button" @click="addCommandArg(command)" class="btn btn-ghost btn-xs">+ 添加参数</button>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(arg, argIndex) in command.args" :key="argIndex">
+                        <div class="join w-full">
+                          <input type="text" x-model="command.args[argIndex]"
+                            class="input input-bordered input-sm join-item w-full font-mono"
+                            placeholder="例如 ecto.migrate" />
+                          <button type="button" @click="removeCommandArg(command, argIndex)"
+                            class="btn btn-ghost btn-sm join-item">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-xs text-base-content/60">命令环境变量</span>
+                      <button type="button" @click="addCommandEnvEntry(command)" class="btn btn-ghost btn-xs">+
+                        添加变量</button>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(entry, envIndex) in command.envEntries" :key="envIndex">
+                        <div class="join w-full">
+                          <input type="text" x-model="entry.key"
+                            class="input input-bordered input-sm join-item w-2/5 font-mono" placeholder="KEY" />
+                          <input type="text" x-model="entry.value"
+                            class="input input-bordered input-sm join-item w-full font-mono" placeholder="VALUE" />
+                          <button type="button" @click="removeCommandEnvEntry(command, envIndex)"
+                            class="btn btn-ghost btn-sm join-item">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-xs text-base-content/60">取消继承的环境变量</span>
+                      <button type="button" @click="addCommandUnsetEnv(command)" class="btn btn-ghost btn-xs">+
+                        添加变量</button>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(name, unsetIndex) in command.unsetEnv" :key="unsetIndex">
+                        <div class="join w-full">
+                          <input type="text" x-model="command.unsetEnv[unsetIndex]"
+                            class="input input-bordered input-sm join-item w-full font-mono"
+                            placeholder="例如 PHX_SERVER" />
+                          <button type="button" @click="removeCommandUnsetEnv(command, unsetIndex)"
+                            class="btn btn-ghost btn-sm join-item">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
           <div class="form-control gap-1">
             <label class="label py-1 text-xs font-semibold">端口（port，留空则运行时分配）</label>
             <input type="number" min="0" max="65535" x-model.number="editConfig.port"
@@ -431,6 +518,96 @@
       </div>
       <form method="dialog" class="modal-backdrop">
         <button @click="closeAppConfig()">关闭</button>
+      </form>
+    </dialog>
+
+    <!-- 一次性命令 Modal -->
+    <dialog id="command_modal" class="modal">
+      <div class="modal-box w-11/12 max-w-2xl">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-lg">应用命令</h3>
+          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="closeCommandModal()">✕</button>
+        </div>
+        <div x-show="commandApp" class="space-y-4">
+          <div class="text-xs text-base-content/60">
+            应用：<span class="font-mono font-semibold text-base-content" x-text="commandApp?.name"></span>
+          </div>
+          <div class="space-y-2">
+            <template x-for="(command, name) in (commandApp?.commands || {})" :key="name">
+              <div class="border border-base-300 rounded-lg p-3 flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="font-mono font-semibold text-primary" x-text="name"></div>
+                  <div class="text-xs font-mono text-base-content/60 truncate"
+                    x-text="commandSummary(command) || '继承默认命令'">
+                  </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm shrink-0" @click="executeCommand(name)"
+                  :disabled="commandLoading">
+                  <span x-show="commandLoading" class="loading loading-spinner loading-xs"></span>
+                  执行
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm shrink-0" @click="showCommandDetails(name)"
+                  :disabled="commandDetailLoading" title="查看命令详情">
+                  查看
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm btn-square shrink-0" @click="copyCommandShell(name)"
+                  :disabled="commandDetailLoading" title="复制 Shell 命令片段">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z">
+                    </path>
+                  </svg>
+                </button>
+              </div>
+            </template>
+            <div x-show="!Object.keys(commandApp?.commands || {}).length"
+              class="border border-dashed border-base-content/20 rounded-lg p-8 text-center text-sm text-base-content/60">
+              暂无快捷命令
+            </div>
+          </div>
+          <div x-show="commandDetail" class="space-y-3 border-t border-base-300 pt-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold">命令详情：<span class="font-mono text-primary"
+                  x-text="commandDetail?.name"></span></span>
+              <button type="button" class="btn btn-ghost btn-xs"
+                @click="copyText(commandDetail?.shell, 'Shell 命令片段')">复制 Shell</button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="bg-base-200 rounded-lg p-3">
+                <div class="text-base-content/60">工作目录</div>
+                <div class="font-mono break-all mt-1" x-text="commandDetail?.cwd || '当前目录'"></div>
+              </div>
+              <div class="bg-base-200 rounded-lg p-3">
+                <div class="text-base-content/60">命令</div>
+                <div class="font-mono break-all mt-1" x-text="commandSummary(commandDetail)"></div>
+              </div>
+            </div>
+            <pre
+              class="bg-neutral text-neutral-content p-3 rounded-lg max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs"
+              x-text="commandDetail?.shell"></pre>
+            <pre
+              class="bg-neutral text-neutral-content p-3 rounded-lg max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs"
+              x-text="JSON.stringify(commandDetail?.env || {}, null, 2)"></pre>
+          </div>
+          <div x-show="commandResult" class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold">执行结果：<span class="font-mono"
+                  x-text="commandResult?.name"></span></span>
+              <span class="badge" :class="commandResult?.ok ? 'badge-success' : 'badge-error'"
+                x-text="commandResult?.ok ? '成功' : '失败'"></span>
+            </div>
+            <div x-show="commandResult?.error" class="alert alert-error text-xs py-2" x-text="commandResult?.error">
+            </div>
+            <pre
+              class="bg-neutral text-neutral-content p-3 rounded-lg max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs"
+              x-text="commandResult?.output || '无输出'"></pre>
+            <div class="text-xs text-base-content/60">退出码：<span class="font-mono"
+                x-text="commandResult?.exitCode"></span></div>
+          </div>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="closeCommandModal()">关闭</button>
       </form>
     </dialog>
 
@@ -636,6 +813,66 @@
                     class="input input-bordered input-sm join-item w-full font-mono" placeholder="VALUE" />
                   <button type="button" @click="removeRegisterEnvEntry(index)"
                     class="btn btn-ghost btn-sm join-item">删除</button>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="form-control mb-3">
+            <div class="flex justify-between items-center">
+              <label class="label text-xs font-semibold">快捷命令（commands）</label>
+              <button type="button" @click="addCommand(registerCommands)" class="btn btn-ghost btn-xs">+ 添加命令</button>
+            </div>
+            <div class="space-y-3">
+              <template x-for="(command, index) in registerCommands" :key="index">
+                <div class="border border-base-300 rounded-lg p-3 space-y-2">
+                  <div class="flex justify-between items-center gap-2">
+                    <input type="text" x-model="command.name" class="input input-bordered input-sm w-full font-mono"
+                      placeholder="命令名称，例如 migrate" />
+                    <button type="button" @click="removeCommand(registerCommands, index)"
+                      class="btn btn-ghost btn-xs text-error shrink-0">删除命令</button>
+                  </div>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input type="text" x-model="command.cmd" class="input input-bordered input-sm font-mono"
+                      placeholder="cmd（留空继承启动命令）" />
+                    <input type="text" x-model="command.cwd" class="input input-bordered input-sm font-mono"
+                      placeholder="cwd（留空继承应用目录）" />
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-xs text-base-content/60">参数</span>
+                      <button type="button" @click="addCommandArg(command)" class="btn btn-ghost btn-xs">+ 添加参数</button>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(arg, argIndex) in command.args" :key="argIndex">
+                        <div class="join w-full">
+                          <input type="text" x-model="command.args[argIndex]"
+                            class="input input-bordered input-sm join-item w-full font-mono"
+                            placeholder="例如 ecto.migrate" />
+                          <button type="button" @click="removeCommandArg(command, argIndex)"
+                            class="btn btn-ghost btn-sm join-item">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="flex justify-between items-center">
+                      <span class="text-xs text-base-content/60">命令环境变量</span>
+                      <button type="button" @click="addCommandEnvEntry(command)" class="btn btn-ghost btn-xs">+
+                        添加变量</button>
+                    </div>
+                    <div class="space-y-1">
+                      <template x-for="(entry, envIndex) in command.envEntries" :key="envIndex">
+                        <div class="join w-full">
+                          <input type="text" x-model="entry.key"
+                            class="input input-bordered input-sm join-item w-2/5 font-mono" placeholder="KEY" />
+                          <input type="text" x-model="entry.value"
+                            class="input input-bordered input-sm join-item w-full font-mono" placeholder="VALUE" />
+                          <button type="button" @click="removeCommandEnvEntry(command, envIndex)"
+                            class="btn btn-ghost btn-sm join-item">删除</button>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
                 </div>
               </template>
             </div>

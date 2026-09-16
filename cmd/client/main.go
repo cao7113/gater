@@ -89,11 +89,17 @@ func run(c *client, command string, args []string) error {
 		return c.runtime(args)
 	case "logs":
 		return c.logs(oneAppArg(command, args))
-	case "start":
+	case "start", "up":
 		return c.action("start", oneAppArg(command, args))
-	case "stop":
+	case "stop", "down":
 		return c.action("stop", oneAppArg(command, args))
-	case "add":
+	case "run":
+		return c.runCommand(args)
+	case "cmd", "commands":
+		return c.commands(args)
+	case "export":
+		return c.export(args)
+	case "add", "a", "new":
 		return c.addYAML(oneAppArg(command, args))
 	case "remove", "rm":
 		return c.remove(oneAppArg(command, args))
@@ -303,6 +309,44 @@ func (c *client) show(name string) error {
 	return printJSON(app)
 }
 
+func (c *client) export(args []string) error {
+	flags := pflag.NewFlagSet("export", pflag.ContinueOnError)
+	output := flags.StringP("output", "o", "", "写入指定文件而不是打印到标准输出")
+	force := flags.Bool("force", false, "允许覆盖已存在的输出文件")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	name := oneAppArg("export", flags.Args())
+
+	var response struct {
+		YAML string `json:"yaml"`
+	}
+	if err := c.get("/api/apps/"+url.PathEscape(name)+"/config", &response); err != nil {
+		return err
+	}
+
+	if *output == "" {
+		_, err := fmt.Print(response.YAML)
+		return err
+	}
+
+	if !*force {
+		if _, err := os.Stat(*output); err == nil {
+			return fmt.Errorf("文件已存在: %s（使用 --force 覆盖）", *output)
+		}
+	}
+	if dir := filepath.Dir(*output); dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("创建目录失败: %w", err)
+		}
+	}
+	if err := os.WriteFile(*output, []byte(response.YAML), 0644); err != nil {
+		return fmt.Errorf("写入文件失败: %w", err)
+	}
+	fmt.Printf("已导出应用 %q 配置到 %s\n", name, *output)
+	return nil
+}
+
 func (c *client) logs(name string) error {
 	var response struct {
 		Logs string `json:"logs"`
@@ -334,6 +378,80 @@ func (c *client) runtime(args []string) error {
 
 func (c *client) action(action, name string) error {
 	return c.post("/api/apps/"+url.PathEscape(name)+"/"+action, nil)
+}
+
+func (c *client) runCommand(args []string) error {
+	if len(args) != 2 {
+		return errors.New("用法: gater-client run <app> <command>")
+	}
+	var response struct {
+		Output string `json:"output"`
+	}
+	path := "/api/apps/" + url.PathEscape(args[0]) + "/commands/" + url.PathEscape(args[1])
+	if err := c.post(path, &response); err != nil {
+		return err
+	}
+	_, err := fmt.Print(response.Output)
+	return err
+}
+
+func (c *client) generateCommand(args []string) error {
+	if len(args) != 2 {
+		return errors.New("用法: gater-client cmd gen <app> <command>")
+	}
+	var command api.CommandInfo
+	path := "/api/apps/" + url.PathEscape(args[0]) + "/commands/" + url.PathEscape(args[1])
+	if err := c.get(path, &command); err != nil {
+		return err
+	}
+	_, err := fmt.Println(command.Shell)
+	return err
+}
+
+func (c *client) commands(args []string) error {
+	if len(args) == 0 {
+		return errors.New("用法: gater-client cmd <list|run|show> <app> [command]")
+	}
+	switch args[0] {
+	case "list", "ls":
+		if len(args) != 2 {
+			return errors.New("用法: gater-client cmd list <app>")
+		}
+		var commands []api.CommandInfo
+		path := "/api/apps/" + url.PathEscape(args[1]) + "/commands"
+		if err := c.get(path, &commands); err != nil {
+			return err
+		}
+		if len(commands) == 0 {
+			fmt.Println("没有已配置的应用命令")
+			return nil
+		}
+		fmt.Printf("%-20s %-30s %s\n", "NAME", "COMMAND", "CWD")
+		for _, command := range commands {
+			fullCommand := command.Cmd
+			if len(command.Args) > 0 {
+				fullCommand += " " + strings.Join(command.Args, " ")
+			}
+			fmt.Printf("%-20s %-30s %s\n", command.Name, fullCommand, command.Cwd)
+		}
+		return nil
+	case "run":
+		return c.runCommand(args[1:])
+	case "gen":
+		return c.generateCommand(args[1:])
+	case "show":
+		if len(args) != 3 {
+			return errors.New("用法: gater-client cmd show <app> <command>")
+		}
+		var command api.CommandInfo
+		path := "/api/apps/" + url.PathEscape(args[1]) + "/commands/" + url.PathEscape(args[2])
+		if err := c.get(path, &command); err != nil {
+			return err
+		}
+		return printJSON(command)
+	default:
+		return fmt.Errorf("未知命令 %q，支持 list、run、show、gen", args[0])
+	}
 }
 
 func (c *client) addYAML(path string) error {
@@ -485,11 +603,16 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  show <app>        查看应用配置与状态")
 	fmt.Fprintln(os.Stderr, "  runtime <app>     查看运行配置（默认脱敏；--show-sensitive 显示敏感值）")
 	fmt.Fprintln(os.Stderr, "  logs <app>        查看应用日志")
-	fmt.Fprintln(os.Stderr, "  start <app>       启动应用")
-	fmt.Fprintln(os.Stderr, "  stop <app>        停止应用")
-	fmt.Fprintln(os.Stderr, "  add <path-with-app.yaml>        通过路径添加应用")
+	fmt.Fprintln(os.Stderr, "  start <app>       启动应用 (别名: up)")
+	fmt.Fprintln(os.Stderr, "  stop <app>        停止应用 (别名: down)")
+	fmt.Fprintln(os.Stderr, "  run <app> <command> 执行应用一次性命令")
+	fmt.Fprintln(os.Stderr, "  cmd list <app>    列出应用一次性命令 (别名: commands)")
+	fmt.Fprintln(os.Stderr, "  cmd run <app> <command> 执行应用一次性命令")
+	fmt.Fprintln(os.Stderr, "  cmd show <app> <command> 查看继承后的命令配置")
+	fmt.Fprintln(os.Stderr, "  cmd gen <app> <command> 生成可复制执行的 Shell 命令片段")
+	fmt.Fprintln(os.Stderr, "  export <app> [-o file] [--force] 导出应用当前配置为 app.yaml 格式")
+	fmt.Fprintln(os.Stderr, "  add <path-with-app.yaml>        通过路径添加应用(别名: a, new)")
 	fmt.Fprintln(os.Stderr, "  remove <name>     删除应用 (别名: rm)")
-	fmt.Fprintln(os.Stderr, "\n默认地址: "+defaultServerURL)
 }
 
 func fatal(err error) {

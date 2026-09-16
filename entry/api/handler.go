@@ -324,7 +324,59 @@ func (h *handler) getAppRuntime(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, application.SnapshotWithSensitive(showSensitive))
 }
 
+func (h *handler) listCommands(w http.ResponseWriter, r *http.Request) {
+	name := pathName(r)
+	application, exists := h.mgr.GetApp(name)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("应用 [%s] 不存在", name))
+		return
+	}
+
+	commands := make([]CommandInfo, 0, len(application.Config.Commands))
+	for commandName := range application.Config.Commands {
+		resolved, err := application.ResolveCommand(commandName)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		commands = append(commands, commandInfo(commandName, resolved))
+	}
+	sort.Slice(commands, func(i, j int) bool { return commands[i].Name < commands[j].Name })
+	writeJSON(w, http.StatusOK, commands)
+}
+
+func (h *handler) getCommand(w http.ResponseWriter, r *http.Request) {
+	name := pathName(r)
+	commandName := r.PathValue("command")
+	application, exists := h.mgr.GetApp(name)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("应用 [%s] 不存在", name))
+		return
+	}
+	resolved, err := application.ResolveCommand(commandName)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, commandInfo(commandName, resolved))
+}
+
+func commandInfo(name string, command config.CommandConfig) CommandInfo {
+	return CommandInfo{
+		Name:  name,
+		Cmd:   command.Cmd,
+		Args:  command.Args,
+		Cwd:   command.Cwd,
+		Env:   command.Env,
+		Shell: shellCommandConfig(command),
+	}
+}
+
 func shellCommand(cfg config.AppConfig, port int) string {
+	workingDir := cfg.Cwd
+	if workingDir == "" {
+		workingDir = "."
+	}
 	args := make([]string, 0, len(cfg.Args))
 	for _, arg := range cfg.Args {
 		args = append(args, shellQuote(strings.ReplaceAll(arg, "$PORT", fmt.Sprintf("%d", port))))
@@ -346,7 +398,31 @@ func shellCommand(cfg config.AppConfig, port int) string {
 		}
 		envParts = append(envParts, shellQuote(name+"="+value))
 	}
-	parts := append([]string{"cd", "--", shellQuote(cfg.Cwd), "&&", "env"}, envParts...)
+	parts := append([]string{"cd", "--", shellQuote(workingDir), "&&", "env"}, envParts...)
+	parts = append(parts, shellQuote(cfg.Cmd))
+	parts = append(parts, args...)
+	return strings.Join(parts, " ")
+}
+
+func shellCommandConfig(cfg config.CommandConfig) string {
+	workingDir := cfg.Cwd
+	if workingDir == "" {
+		workingDir = "."
+	}
+	args := make([]string, 0, len(cfg.Args))
+	for _, arg := range cfg.Args {
+		args = append(args, shellQuote(arg))
+	}
+	envNames := make([]string, 0, len(cfg.Env))
+	for name := range cfg.Env {
+		envNames = append(envNames, name)
+	}
+	sort.Strings(envNames)
+	envParts := make([]string, 0, len(envNames))
+	for _, name := range envNames {
+		envParts = append(envParts, shellQuote(name+"="+cfg.Env[name]))
+	}
+	parts := append([]string{"cd", "--", shellQuote(workingDir), "&&", "env"}, envParts...)
 	parts = append(parts, shellQuote(cfg.Cmd))
 	parts = append(parts, args...)
 	return strings.Join(parts, " ")
@@ -392,6 +468,30 @@ func (h *handler) startApp(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (h *handler) runCommand(w http.ResponseWriter, r *http.Request) {
+	name := pathName(r)
+	command := r.PathValue("command")
+	application, exists := h.mgr.GetApp(name)
+	if !exists {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("应用 [%s] 不存在", name))
+		return
+	}
+
+	result, err := application.RunCommand(r.Context(), command)
+	response := map[string]any{
+		"app":       name,
+		"command":   command,
+		"output":    result.Output,
+		"exit_code": result.ExitCode,
+	}
+	if err != nil {
+		response["error"] = err.Error()
+		writeJSON(w, http.StatusUnprocessableEntity, response)
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (h *handler) getLogs(w http.ResponseWriter, r *http.Request) {
 	name := pathName(r)
 	application, exists := h.mgr.GetApp(name)
@@ -422,6 +522,7 @@ func appToInfo(a *app.App) AppInfo {
 		Cmd:              a.Config.Cmd,
 		Args:             a.Config.Args,
 		Env:              a.Config.Env,
+		Commands:         a.Config.Commands,
 		ConfigPort:       a.Config.Port,
 		Port:             a.Port,
 		State:            string(a.State),

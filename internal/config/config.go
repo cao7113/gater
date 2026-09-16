@@ -19,17 +19,26 @@ const (
 var TargetHost = DefaultTargetHost
 
 type AppConfig struct {
-	Name         string            `yaml:"name" json:"name"`
-	Aliases      []string          `yaml:"aliases,omitempty" json:"aliases,omitempty"`
-	Endpoints    []EndpointConfig  `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
-	DomainSuffix string            `yaml:"domain_suffix" json:"domain_suffix"`
-	AppType      string            `yaml:"app_type" json:"app_type"`
-	Cwd          string            `yaml:"cwd" json:"cwd"`
-	Cmd          string            `yaml:"cmd" json:"cmd"`
-	Args         []string          `yaml:"args" json:"args"`
-	Env          map[string]string `yaml:"env" json:"env"`
-	Port         int               `yaml:"port,omitempty" json:"port,omitempty"`
-	IdleTimeout  string            `yaml:"idle_timeout" json:"idle_timeout"`
+	Name         string                   `yaml:"name" json:"name"`
+	Aliases      []string                 `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+	Endpoints    []EndpointConfig         `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
+	DomainSuffix string                   `yaml:"domain_suffix" json:"domain_suffix"`
+	AppType      string                   `yaml:"app_type" json:"app_type"`
+	Cwd          string                   `yaml:"cwd" json:"cwd"`
+	Cmd          string                   `yaml:"cmd" json:"cmd"`
+	Args         []string                 `yaml:"args" json:"args"`
+	Env          map[string]string        `yaml:"env" json:"env"`
+	Commands     map[string]CommandConfig `yaml:"commands,omitempty" json:"commands,omitempty"`
+	Port         int                      `yaml:"port,omitempty" json:"port,omitempty"`
+	IdleTimeout  string                   `yaml:"idle_timeout" json:"idle_timeout"`
+}
+
+type CommandConfig struct {
+	Cmd      string            `yaml:"cmd,omitempty" json:"cmd,omitempty"`
+	Args     []string          `yaml:"args,omitempty" json:"args,omitempty"`
+	Cwd      string            `yaml:"cwd,omitempty" json:"cwd,omitempty"`
+	Env      map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	UnsetEnv []string          `yaml:"unset_env,omitempty" json:"unset_env,omitempty"`
 }
 
 type EndpointConfig struct {
@@ -118,6 +127,33 @@ func Validate(cfg AppConfig) error {
 	}
 	if cfg.Port < 0 || cfg.Port > 65535 {
 		return fmt.Errorf("port 无效: %d", cfg.Port)
+	}
+	for name, command := range cfg.Commands {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("command 名称不能为空")
+		}
+		if strings.TrimSpace(command.Cmd) == "" && len(command.Args) == 0 && strings.TrimSpace(command.Cwd) == "" && len(command.Env) == 0 && len(command.UnsetEnv) == 0 {
+			return fmt.Errorf("command [%s] 不能为空", name)
+		}
+		for envName := range command.Env {
+			if !isEnvName(envName) {
+				return fmt.Errorf("command [%s] 环境变量名无效: %q", name, envName)
+			}
+		}
+		unsetNames := make(map[string]struct{}, len(command.UnsetEnv))
+		for _, envName := range command.UnsetEnv {
+			envName = strings.TrimSpace(envName)
+			if !isEnvName(envName) {
+				return fmt.Errorf("command [%s] unset_env 变量名无效: %q", name, envName)
+			}
+			if _, exists := unsetNames[envName]; exists {
+				return fmt.Errorf("command [%s] unset_env 变量重复: %q", name, envName)
+			}
+			if _, exists := command.Env[envName]; exists {
+				return fmt.Errorf("command [%s] 不能同时设置和删除环境变量: %q", name, envName)
+			}
+			unsetNames[envName] = struct{}{}
+		}
 	}
 	seenEndpoints := make(map[string]struct{}, len(cfg.Endpoints))
 	seenPortEnvs := make(map[string]struct{}, len(cfg.Endpoints))

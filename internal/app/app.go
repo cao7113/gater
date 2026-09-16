@@ -47,12 +47,18 @@ type App struct {
 	Pid           int
 	RuntimeEnv    map[string]string
 	StartedAt     *time.Time
+	commandMu     sync.Mutex
 
 	Proxy         *httputil.ReverseProxy
 	endpointProxy map[string]*httputil.ReverseProxy
 	LogBuf        *LogBuffer
 	StartupMs     int64
 	LastStartedAt *time.Time
+}
+
+type CommandResult struct {
+	Output   string
+	ExitCode int
 }
 
 // NewApp 创建并初始化应用实例
@@ -166,6 +172,91 @@ func (a *App) Run(ctx context.Context) error {
 	log.Printf("[Gater] [%s] 应用就绪，耗时 %dms，运行于 %s", a.Config.Name, a.StartupMs, net.JoinHostPort(config.TargetHost, strconv.Itoa(a.Port)))
 
 	return nil
+}
+
+// RunCommand executes a configured one-shot command without changing the server lifecycle.
+func (a *App) RunCommand(ctx context.Context, name string) (CommandResult, error) {
+	a.commandMu.Lock()
+	defer a.commandMu.Unlock()
+
+	command, ok := a.Config.Commands[name]
+	if !ok {
+		return CommandResult{}, fmt.Errorf("命令 [%s] 不存在", name)
+	}
+
+	runContext := a.newCommandContext(command)
+	if runContext.Config.Cmd == "" {
+		return CommandResult{}, fmt.Errorf("命令 [%s] 未配置 cmd", name)
+	}
+	if err := types.HandlerFor(runContext.Config.AppType).Prepare(runContext); err != nil {
+		return CommandResult{}, fmt.Errorf("准备命令运行环境失败: %w", err)
+	}
+	if _, err := exec.LookPath(runContext.Config.Cmd); err != nil {
+		return CommandResult{}, fmt.Errorf("未找到命令 [%s]: %w", runContext.Config.Cmd, err)
+	}
+	if runContext.WorkingDir != "" {
+		info, err := os.Stat(runContext.WorkingDir)
+		if err != nil || !info.IsDir() {
+			return CommandResult{}, fmt.Errorf("命令工作目录不存在: %s", runContext.WorkingDir)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, runContext.Config.Cmd, runContext.Args...)
+	cmd.Dir = runContext.WorkingDir
+	cmd.Env = ToEnvList(runContext.Env)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	output, err := cmd.CombinedOutput()
+	result := CommandResult{Output: string(output), ExitCode: 0}
+	if err == nil {
+		return result, nil
+	}
+	if exitError, ok := err.(*exec.ExitError); ok {
+		result.ExitCode = exitError.ExitCode()
+	}
+	return result, fmt.Errorf("命令 [%s] 执行失败: %w", name, err)
+}
+
+// ResolveCommand returns the effective command configuration after App inheritance.
+func (a *App) ResolveCommand(name string) (config.CommandConfig, error) {
+	command, ok := a.Config.Commands[name]
+	if !ok {
+		return config.CommandConfig{}, fmt.Errorf("命令 [%s] 不存在", name)
+	}
+	return a.resolveCommandConfig(command), nil
+}
+
+func (a *App) resolveCommandConfig(command config.CommandConfig) config.CommandConfig {
+	resolved := config.CommandConfig{
+		Cmd:  a.Config.Cmd,
+		Args: []string{},
+		Cwd:  a.Config.Cwd,
+		Env:  cloneEnvMap(a.Config.Env),
+	}
+	if command.Cmd != "" {
+		resolved.Cmd = command.Cmd
+	}
+	if command.Args != nil {
+		resolved.Args = append([]string(nil), command.Args...)
+	}
+	if command.Cwd != "" {
+		resolved.Cwd = command.Cwd
+	}
+	for key, value := range command.Env {
+		resolved.Env[key] = value
+	}
+	for _, key := range command.UnsetEnv {
+		delete(resolved.Env, key)
+	}
+
+	ctxVars := map[string]string{
+		"APP_NAME":   a.Config.Name,
+		"APP_DOMAIN": a.Domain(),
+	}
+	for key, value := range resolved.Env {
+		resolved.Env[key] = ExpandPlaceholders(value, ctxVars)
+	}
+	resolved.Args = ExpandSlice(resolved.Args, ctxVars)
+	return resolved
 }
 
 // startAppLocked 具体的启动核心逻辑（必须在持有 a.mu 的情况下调用）
@@ -488,6 +579,33 @@ func (a *App) newAppTypeContext() *types.TypeContext {
 		Port:       a.Port,
 		WorkingDir: a.Config.Cwd,
 		Args:       args,
+		Env:        envMap,
+	}
+}
+
+func (a *App) newCommandContext(command config.CommandConfig) *types.TypeContext {
+	resolved := a.resolveCommandConfig(command)
+	commandConfig := a.Config
+	commandConfig.Cmd = resolved.Cmd
+	commandConfig.Args = resolved.Args
+	commandConfig.Cwd = resolved.Cwd
+	commandConfig.Env = resolved.Env
+
+	sysEnviron := os.Environ()
+	envMap := make(map[string]string, len(sysEnviron)+len(commandConfig.Env))
+	for _, item := range sysEnviron {
+		if key, value, ok := strings.Cut(item, "="); ok {
+			envMap[key] = value
+		}
+	}
+	for key, value := range commandConfig.Env {
+		envMap[key] = value
+	}
+	return &types.TypeContext{
+		Config:     commandConfig,
+		Domain:     a.Domain(),
+		WorkingDir: commandConfig.Cwd,
+		Args:       commandConfig.Args,
 		Env:        envMap,
 	}
 }
