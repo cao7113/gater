@@ -73,6 +73,19 @@ func LoadFrom(yamlPath string) (*AppConfig, error) {
 		return nil, fmt.Errorf("读取 app.yaml 失败: %w", err)
 	}
 
+	appDir, err := filepath.Abs(filepath.Dir(yamlPath))
+	if err != nil {
+		return nil, fmt.Errorf("解析应用目录失败: %w", err)
+	}
+	return LoadFromContent(data, appDir)
+}
+
+func LoadFromContent(data []byte, appDir string) (*AppConfig, error) {
+	appDir, err := filepath.Abs(appDir)
+	if err != nil {
+		return nil, fmt.Errorf("解析应用目录失败: %w", err)
+	}
+
 	var cfg AppConfig
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
@@ -80,10 +93,6 @@ func LoadFrom(yamlPath string) (*AppConfig, error) {
 		return nil, fmt.Errorf("解析 app.yaml 失败: %w", err)
 	}
 
-	appDir, err := filepath.Abs(filepath.Dir(yamlPath))
-	if err != nil {
-		return nil, fmt.Errorf("解析应用目录失败: %w", err)
-	}
 	if strings.TrimSpace(cfg.Cwd) == "" {
 		cfg.Cwd = appDir
 	}

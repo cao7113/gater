@@ -10,6 +10,7 @@ func NewHandler(mgr appManager) http.Handler {
 	mux.HandleFunc("POST /api/fs/pick-yaml-file", h.pickYAMLFile)
 	mux.HandleFunc("POST /api/fs/pick-directory", h.pickDirectory)
 	mux.HandleFunc("POST /api/apps/from-yaml", h.fromYAML)
+	mux.HandleFunc("POST /api/apps/from-yaml-content", h.fromYAMLContent)
 
 	// Server and store configuration.
 	mux.HandleFunc("GET /api/config", h.getConfig)

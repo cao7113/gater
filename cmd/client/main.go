@@ -458,6 +458,25 @@ func (c *client) addYAML(path string) error {
 	if path == "" {
 		return errors.New("path is required")
 	}
+	if path == "-" {
+		content, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("读取标准输入失败: %w", err)
+		}
+		appDir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("获取当前目录失败: %w", err)
+		}
+		body, err := json.Marshal(map[string]string{"content": string(content), "app_dir": appDir})
+		if err != nil {
+			return err
+		}
+		if err := c.postJSON("/api/apps/from-yaml-content", bytes.NewReader(body)); err != nil {
+			return err
+		}
+		fmt.Println("已从标准输入添加应用")
+		return nil
+	}
 	if !filepath.IsAbs(path) {
 		if _, err := os.Stat(path); err == nil {
 			absPath, err := filepath.Abs(path)
@@ -611,7 +630,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  cmd show <app> <command> 查看继承后的命令配置")
 	fmt.Fprintln(os.Stderr, "  cmd gen <app> <command> 生成可复制执行的 Shell 命令片段")
 	fmt.Fprintln(os.Stderr, "  export <app> [-o file] [--force] 导出应用当前配置为 app.yaml 格式")
-	fmt.Fprintln(os.Stderr, "  add <path-with-app.yaml>        通过路径添加应用(别名: a, new)")
+	fmt.Fprintln(os.Stderr, "  add <path/to/app.yaml>        通过路径添加应用(别名: a, new)")
 	fmt.Fprintln(os.Stderr, "  remove <name>     删除应用 (别名: rm)")
 }
 

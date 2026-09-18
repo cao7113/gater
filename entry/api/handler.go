@@ -233,6 +233,42 @@ func (h *handler) fromYAML(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
+func (h *handler) fromYAMLContent(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Content string `json:"content"`
+		AppDir  string `json:"app_dir"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if strings.TrimSpace(request.Content) == "" {
+		writeError(w, http.StatusBadRequest, "yaml content is required")
+		return
+	}
+	if strings.TrimSpace(request.AppDir) == "" {
+		request.AppDir = "."
+	}
+	cfg, err := config.LoadFromContent([]byte(request.Content), request.AppDir)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := config.ValidateDomainSuffix(cfg.DomainSuffix, h.mgr.AppSuffixes()); err != nil {
+		writeError(w, http.StatusBadRequest, "应用配置无效: "+err.Error())
+		return
+	}
+	if err := h.mgr.RegisterApp(*cfg); err != nil {
+		if errors.Is(err, manager.ErrAppExists) {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
 func isYAMLPathAllowed(path string) bool {
 	return path != "" && filepath.IsAbs(path)
 }

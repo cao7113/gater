@@ -301,6 +301,35 @@ func TestFromYAMLRejectsRelativePath(t *testing.T) {
 	}
 }
 
+func TestFromYAMLContentUsesProvidedAppDir(t *testing.T) {
+	appDir := t.TempDir()
+	body, err := json.Marshal(map[string]string{
+		"content": `name: stdin-demo
+domain_suffix: .l
+cmd: mix
+`,
+		"app_dir": appDir,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/from-yaml-content", bytes.NewReader(body))
+	res := httptest.NewRecorder()
+	mgr := newFakeMgr()
+	(&handler{mgr: mgr}).fromYAMLContent(res, req)
+
+	if res.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", res.Code, res.Body.String())
+	}
+	application, ok := mgr.GetApp("stdin-demo")
+	if !ok {
+		t.Fatal("application was not registered")
+	}
+	if application.Config.Cwd != appDir {
+		t.Fatalf("want cwd %q, got %q", appDir, application.Config.Cwd)
+	}
+}
+
 func TestLoadFromUsesExplicitCwdInAppYAML(t *testing.T) {
 	appDir := t.TempDir()
 	appPath := filepath.Join(appDir, "app.yaml")
